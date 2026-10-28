@@ -1,0 +1,6 @@
+{
+  "name": "DailyLingo - Học Tiếng Anh Mỗi Ngày",
+  "description": "Ứng dụng luyện tập tiếng Anh tương tác mỗi ngày: học từ vựng, luyện nghe nói, sắp xếp câu và theo dõi tiến độ học tập toàn diện.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
