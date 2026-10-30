@@ -12,12 +12,13 @@ import {
 } from 'lucide-react';
 import { SavedWord, CEFRLevel, TopicCategory } from '../types/index.ts';
 import { speakEnglish, soundFX } from '../utils/speech.ts';
+import { getTodayDateString } from '../utils/storage.ts';
 import { computeNextReviewDate } from '../data/curriculumData.ts';
 
 interface VocabularyNotebookProps {
   savedWords: SavedWord[];
   onToggleMastered: (id: string) => void;
-  onAddWord: (word: Omit<SavedWord, 'id' | 'reviewCount' | 'lastReviewedAt' | 'mastered'>) => void;
+  onAddWord: (word: Omit<SavedWord, 'id'>) => void;
   onDeleteWord: (id: string) => void;
   onStartReviewSession: (words: SavedWord[]) => void;
   audioAccent: 'en-US' | 'en-GB';

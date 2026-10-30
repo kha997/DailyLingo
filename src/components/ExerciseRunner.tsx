@@ -18,6 +18,8 @@ import confetti from 'canvas-confetti';
 import { ExerciseItem, SavedWord, UserStats } from '../types/index.ts';
 import { speakEnglish, calculateSimilarity, SpeechRecognizer } from '../utils/speech.ts';
 import { isNotificationSupported } from '../utils/notifications.ts';
+import { computeNextReviewDate } from '../data/curriculumData.ts';
+import { getTodayDateString } from '../utils/storage.ts';
 import {
   playPopSound,
   playTadaSound,
@@ -640,6 +642,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                               mastered: false,
                               reviewCount: 1,
                               lastReviewedAt: new Date().toISOString().split('T')[0],
+                              nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0), // Day 1 review
                             });
                           }
                         }}

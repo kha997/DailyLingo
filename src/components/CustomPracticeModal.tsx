@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Wand2, Play } from 'lucide-react';
-import { CEFRLevel, ExerciseItemWithAI } from '../types/index.ts';
-import { generateDynamicExerciseSet } from '../utils/dynamicGenerator.ts';
+import { CEFRLevel, ExerciseItem } from '../types/index.ts';
+import { generateDynamicExerciseSet, ExerciseItemWithAI } from '../utils/dynamicGenerator.ts';
 import { soundFX } from '../utils/speech.ts';
 
 interface CustomPracticeModalProps {
@@ -41,7 +41,7 @@ export const CustomPracticeModal: React.FC<CustomPracticeModalProps> = ({
         level,
         skillFocus,
         questionCount,
-      });
+      }) as ExerciseItemWithAI[];
 
       // Determine generation type for display
       const isAI = generated.some((ex) => ex.aiMetadata?.generatedBy === 'ai');

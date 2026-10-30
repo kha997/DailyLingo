@@ -1435,7 +1435,7 @@ export const DEFAULT_BADGES: Badge[] = [
 ];
 
 // Helper: compute next review date using spaced repetition
-function computeNextReviewDate(lastReviewed: string, mastery: number, reviewCount: number): string {
+export function computeNextReviewDate(lastReviewed: string, mastery: number, reviewCount: number): string {
   const lastDate = new Date(lastReviewed);
   const today = new Date();
   today.setHours(0, 0, 0, 0);

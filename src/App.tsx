@@ -16,6 +16,7 @@ import { StreakDetailsModal } from './components/StreakDetailsModal.tsx';
 import { CustomPracticeModal } from './components/CustomPracticeModal.tsx';
 
 import { ExerciseItem, LessonUnit, SavedWord, UserStats, Badge } from './types/index.ts';
+import { computeNextReviewDate } from './data/curriculumData.ts';
 import { LESSON_UNITS, getDailyChallengeExercises } from './data/curriculumData.ts';
 import {
   loadUserStats,

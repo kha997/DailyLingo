@@ -1,5 +1,13 @@
 import { soundEffects } from './audioEffects.ts';
 
+// Web Audio API Sound Synthesizer delegation
+export const soundFX = {
+  playCorrect: () => soundEffects.pop(),
+  playWrong: () => soundEffects.wrong(),
+  playComplete: () => soundEffects.tada(),
+  playClick: () => soundEffects.click(),
+};
+
 // Web Speech Synthesis (Text to Speech)
 let availableVoices: SpeechSynthesisVoice[] = [];
 let activeUtterance: SpeechSynthesisUtterance | null = null;
@@ -141,7 +149,7 @@ export interface SpeechRecognizerInitState {
 
 export class SpeechRecognizer {
   // eslint-disable-next-line @typescript-eslint/no-explicit-internal
-  private recognition: any = null;
+  public recognition: any = null;
   public isSupported: boolean = false;
   public permissionDenied: boolean = false;
   private isListening: boolean = false;
