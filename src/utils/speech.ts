@@ -1,14 +1,5 @@
 import { soundEffects } from './audioEffects.ts';
 
-// Web Audio API Sound Synthesizer delegation
-export const soundFX = {
-  playCorrect: () => soundEffects.pop(),
-  playWrong: () => soundEffects.wrong(),
-  playComplete: () => soundEffects.tada(),
-  playClick: () => soundEffects.click(),
-  playDing: () => soundEffects.ding(),
-};
-
 // Web Speech Synthesis (Text to Speech)
 let availableVoices: SpeechSynthesisVoice[] = [];
 let activeUtterance: SpeechSynthesisUtterance | null = null;
@@ -143,15 +134,21 @@ export interface SpeechRecognitionResult {
   isFinal: boolean;
 }
 
+export interface SpeechRecognizerInitState {
+  isSupported: boolean;
+  permissionDenied: boolean;
+}
+
 export class SpeechRecognizer {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-internal
   private recognition: any = null;
   public isSupported: boolean = false;
+  public permissionDenied: boolean = false;
   private isListening: boolean = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-internal
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         this.isSupported = true;
@@ -159,6 +156,8 @@ export class SpeechRecognizer {
         this.recognition.continuous = false;
         this.recognition.interimResults = true;
         this.recognition.lang = 'en-US';
+        // Set up permission state on init
+        this.permissionDenied = false;
       }
     }
   }
@@ -169,7 +168,7 @@ export class SpeechRecognizer {
     onEnd: () => void
   ) {
     if (!this.recognition) {
-      onError('Trình duyệt không hỗ trợ nhận diện giọng nói Web Speech. Bạn có thể sử dụng Chrome/Edge.');
+      onError('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói Web Speech API. Vui lòng sử dụng Chrome hoặc Edge để sử dụng tính năng luyện nói.');
       return;
     }
 
@@ -181,7 +180,7 @@ export class SpeechRecognizer {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-internal
     this.recognition.onresult = (event: any) => {
       let finalTranscript = '';
       let interimTranscript = '';
@@ -198,10 +197,18 @@ export class SpeechRecognizer {
       });
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-internal
     this.recognition.onerror = (event: any) => {
       this.isListening = false;
-      onError(event.error || 'Lỗi nhận diện âm thanh.');
+      const errorCode = event.error || 'unknown';
+      if (errorCode === 'not-allowed' || errorCode === 'no-speech') {
+        onError('Không có quyền truy cập Microphone. Vui lòng bấm vào biểu tượng cài đặt/ổ khóa trang web và cấp phép Microphone cho DailyLingo.');
+      } else if (errorCode === 'aborted') {
+        // Normal when user stops manually
+        onError('');
+      } else {
+        onError(`Lỗi nhận diện âm thanh: ${event.error}. Vui lòng thử lại.`);
+      }
     };
 
     this.recognition.onend = () => {
@@ -212,9 +219,9 @@ export class SpeechRecognizer {
     try {
       this.isListening = true;
       this.recognition.start();
-    } catch {
+    } catch (err) {
       this.isListening = false;
-      onError('Không thể bắt đầu ghi âm. Vui lòng thử lại.');
+      onError('Không thể bắt đầu ghi âm. Vui lòng thử lại hoặc làm mới trang.');
     }
   }
 

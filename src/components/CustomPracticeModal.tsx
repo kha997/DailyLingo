@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Wand2, Play } from 'lucide-react';
-import { CEFRLevel, ExerciseItem } from '../types/index.ts';
+import { CEFRLevel, ExerciseItemWithAI } from '../types/index.ts';
 import { generateDynamicExerciseSet } from '../utils/dynamicGenerator.ts';
 import { soundFX } from '../utils/speech.ts';
 
@@ -43,9 +43,16 @@ export const CustomPracticeModal: React.FC<CustomPracticeModalProps> = ({
         questionCount,
       });
 
+      // Determine generation type for display
+      const isAI = generated.some((ex) => ex.aiMetadata?.generatedBy === 'ai');
+      const generationType = isAI ? 'AI' : 'Procedural Template';
+
       setIsGenerating(false);
       soundFX.playCorrect();
-      onStartSession(`Luyện Tập: ${customTopicInput.trim() || PRESET_TOPICS.find((p) => p.id === selectedTopic)?.title || 'Chủ Đề Tùy Chọn'}`, generated);
+      onStartSession(
+        `Luyện Tập: ${customTopicInput.trim() || PRESET_TOPICS.find((p) => p.id === selectedTopic)?.title || 'Chủ Đề Tùy Chọn'} (${generationType})`,
+        generated as ExerciseItem[]
+      );
       onClose();
     }, 400);
   };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { SavedWord, CEFRLevel, TopicCategory } from '../types/index.ts';
 import { speakEnglish, soundFX } from '../utils/speech.ts';
+import { computeNextReviewDate } from '../data/curriculumData.ts';
 
 interface VocabularyNotebookProps {
   savedWords: SavedWord[];
@@ -47,7 +48,8 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
   const [newLevel, setNewLevel] = useState<CEFRLevel>('A2');
   const [newTopic, setNewTopic] = useState<TopicCategory>('daily');
 
-  const filteredWords = savedWords.filter((w) => {
+  const todayDateStr = new Date().toISOString().split('T')[0];
+const filteredWords = savedWords.filter((w) => {
     const matchSearch =
       w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
       w.meaningVi.toLowerCase().includes(searchTerm.toLowerCase());
@@ -55,7 +57,9 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
     const matchStatus =
       selectedStatus === 'all' ||
       (selectedStatus === 'mastered' ? w.mastered : !w.mastered);
-    return matchSearch && matchLevel && matchStatus;
+    // Spaced repetition: only show words due for review (nextReviewDate <= today)
+    const isDueForReview = new Date(w.nextReviewDate) <= new Date(todayDateStr);
+    return matchSearch && matchLevel && matchStatus && isDueForReview;
   });
 
   const masteredCount = savedWords.filter((w) => w.mastered).length;
@@ -79,6 +83,10 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
       exampleVi: newExampleVi.trim() || 'Ví dụ minh họa cho từ vựng này.',
       level: newLevel,
       topic: newTopic,
+      mastered: false,
+      reviewCount: 0,
+      lastReviewedAt: getTodayDateString(),
+      nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0), // Day 1 review
     });
 
     // Reset form
@@ -282,12 +290,17 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
                 </div>
               </div>
 
-              {/* Card Footer: Review counter */}
+              {/* Card Footer: Review counter & next review date */}
               <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
                 <span>Ôn tập: {word.reviewCount} lần</span>
                 <span className={word.mastered ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}>
                   {word.mastered ? '● Đã thành thạo' : '○ Cần ôn thêm'}
                 </span>
+                {(!word.mastered) && (
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium ml-2">
+                    {new Date(word.nextReviewDate).getDate()}/{new Date(word.nextReviewDate).getMonth() + 1} hẹn review
+                  </span>
+                )}
               </div>
             </div>
           ))}

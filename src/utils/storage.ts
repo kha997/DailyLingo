@@ -58,11 +58,16 @@ export function loadUserStats(): UserStats {
     // Check if new day
     const today = getTodayDateString();
     if (parsed.lastStudyDate !== today) {
-      // It's a new day, reset todayExercisesDone
+      // It's a new day
       const yesterday = getYesterdayDateString();
-      if (parsed.lastStudyDate !== yesterday) {
-        // missed yesterday -> streak would reset on first study of today, or keep till studied
+      // If last study was yesterday, maintain streak; if older, reset streak
+      if (parsed.lastStudyDate === yesterday) {
+        // Continued streak - keep current streak count
+      } else if (parsed.lastStudyDate === null || parsed.lastStudyDate !== today) {
+        // Missed yesterday or first time -> reset streak to 1 (will be set when user studies today)
+        parsed.currentStreak = 1;
       }
+      // Always reset today's exercise count for the new day
       parsed.todayExercisesDone = 0;
     }
     return parsed;

@@ -17,6 +17,7 @@ import {
 import confetti from 'canvas-confetti';
 import { ExerciseItem, SavedWord, UserStats } from '../types/index.ts';
 import { speakEnglish, calculateSimilarity, SpeechRecognizer } from '../utils/speech.ts';
+import { isNotificationSupported } from '../utils/notifications.ts';
 import {
   playPopSound,
   playTadaSound,
@@ -236,6 +237,13 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
       recognizerRef.current = new SpeechRecognizer();
     }
     const recognizer = recognizerRef.current;
+
+    // If speech recognition is not supported, show a friendly message and return
+    if (!recognizer.isSupported) {
+      setSpeakingError('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói Web Speech API. Vui lòng sử dụng Chrome hoặc Edge để sử dụng tính năng luyện nói.');
+      setIsRecording(false);
+      return;
+    }
 
     if (isRecording) {
       recognizer.stopListening();

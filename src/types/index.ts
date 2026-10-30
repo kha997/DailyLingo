@@ -83,6 +83,7 @@ export interface SavedWord {
   mastered: boolean;
   reviewCount: number;
   lastReviewedAt: string;
+  nextReviewDate: string; // YYYY-MM-DD - spaced repetition schedule
 }
 
 export interface Badge {

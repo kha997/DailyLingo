@@ -1192,6 +1192,7 @@ export const LESSON_UNITS: LessonUnit[] = [
 ];
 
 // Expanded Vocabulary Notebook with 36 high-frequency practical words
+// Expanded Vocabulary Notebook with 36 high-frequency practical words
 export const INITIAL_SAVED_WORDS: SavedWord[] = [
   {
     id: 'w-1',
@@ -1205,7 +1206,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'daily',
     mastered: true,
     reviewCount: 5,
-    lastReviewedAt: '2026-10-25'
+    lastReviewedAt: '2026-10-25',
+    nextReviewDate: computeNextReviewDate('2026-10-25', 90, 5)
   },
   {
     id: 'w-2',
@@ -1219,7 +1221,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'daily',
     mastered: false,
     reviewCount: 2,
-    lastReviewedAt: '2026-10-26'
+    lastReviewedAt: '2026-10-26',
+    nextReviewDate: computeNextReviewDate('2026-10-26', 40, 2)
   },
   {
     id: 'w-3',
@@ -1233,7 +1236,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'travel',
     mastered: false,
     reviewCount: 3,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 25, 3)
   },
   {
     id: 'w-4',
@@ -1247,7 +1251,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'work',
     mastered: true,
     reviewCount: 4,
-    lastReviewedAt: '2026-10-24'
+    lastReviewedAt: '2026-10-24',
+    nextReviewDate: computeNextReviewDate('2026-10-24', 75, 4)
   },
   {
     id: 'w-5',
@@ -1261,7 +1266,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'social',
     mastered: false,
     reviewCount: 1,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 30, 1)
   },
   {
     id: 'w-6',
@@ -1275,7 +1281,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'daily',
     mastered: false,
     reviewCount: 1,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 35, 1)
   },
   {
     id: 'w-7',
@@ -1289,7 +1296,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'travel',
     mastered: false,
     reviewCount: 1,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 20, 1)
   },
   {
     id: 'w-8',
@@ -1303,7 +1311,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'work',
     mastered: true,
     reviewCount: 3,
-    lastReviewedAt: '2026-10-26'
+    lastReviewedAt: '2026-10-26',
+    nextReviewDate: computeNextReviewDate('2026-10-26', 60, 3)
   },
   {
     id: 'w-9',
@@ -1317,7 +1326,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'work',
     mastered: false,
     reviewCount: 2,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 45, 2)
   },
   {
     id: 'w-10',
@@ -1326,12 +1336,13 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     partOfSpeech: 'n',
     meaningVi: 'Sự tình cờ may mắn, duyên may bất ngờ',
     exampleEn: 'Finding my current business partner was pure serendipity.',
-    exampleVi: 'Tìm được đối tác kinh doanh hiện tại của tôi hoàn toàn là một duyên may tình cờ.',
+    exampleVi: 'Tìm được đối tác kinh doanh hiện tại của tôi hoàn toàn là một duyênmay tình cờ.',
     level: 'B2',
     topic: 'social',
     mastered: false,
     reviewCount: 1,
-    lastReviewedAt: '2026-10-27'
+    lastReviewedAt: '2026-10-27',
+    nextReviewDate: computeNextReviewDate('2026-10-27', 15, 1)
   },
   {
     id: 'w-11',
@@ -1345,7 +1356,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'daily',
     mastered: true,
     reviewCount: 4,
-    lastReviewedAt: '2026-10-25'
+    lastReviewedAt: '2026-10-25',
+    nextReviewDate: computeNextReviewDate('2026-10-25', 80, 4)
   },
   {
     id: 'w-12',
@@ -1359,7 +1371,8 @@ export const INITIAL_SAVED_WORDS: SavedWord[] = [
     topic: 'tech',
     mastered: false,
     reviewCount: 2,
-    lastReviewedAt: '2026-10-26'
+    lastReviewedAt: '2026-10-26',
+    nextReviewDate: computeNextReviewDate('2026-10-26', 50, 2)
   }
 ];
 
@@ -1420,6 +1433,42 @@ export const DEFAULT_BADGES: Badge[] = [
     currentCount: 180
   }
 ];
+
+// Helper: compute next review date using spaced repetition
+function computeNextReviewDate(lastReviewed: string, mastery: number, reviewCount: number): string {
+  const lastDate = new Date(lastReviewed);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  lastDate.setHours(0, 0, 0, 0);
+
+  // Days until next review based on mastery and review count
+  let baseDays: number;
+  if (mastery >= 80 && reviewCount >= 3) {
+    baseDays = 30;
+  } else if (mastery >= 70) {
+    baseDays = 14;
+  } else if (mastery >= 50) {
+    baseDays = 7;
+  } else if (mastery >= 30) {
+    baseDays = 3;
+  } else {
+    baseDays = 1;
+  }
+
+  // Gradually increase interval with each review
+  const intervalFactor = Math.min(2, 1 + reviewCount * 0.2);
+  const finalDays = Math.round(baseDays * intervalFactor);
+
+  const nextDate = new Date(lastDate);
+  nextDate.setDate(nextDate.getDate() + finalDays);
+
+  // If the next review is in the past or today, schedule for tomorrow
+  if (nextDate <= today) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  return nextDate.toISOString().split('T')[0];
+}
 
 // Helper to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {

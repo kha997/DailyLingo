@@ -281,7 +281,7 @@ export default function App() {
   };
 
   const handleAddWord = (
-    wordData: Omit<SavedWord, 'id' | 'reviewCount' | 'lastReviewedAt' | 'mastered'>
+    wordData: Omit<SavedWord, 'id' | 'reviewCount' | 'lastReviewedAt' | 'mastered' | 'nextReviewDate'>
   ) => {
     const newWord: SavedWord = {
       ...wordData,
@@ -289,6 +289,7 @@ export default function App() {
       mastered: false,
       reviewCount: 0,
       lastReviewedAt: getTodayDateString(),
+      nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0), // Day 1 review
     };
     setSavedWords((prev) => [newWord, ...prev]);
 
