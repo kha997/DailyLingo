@@ -275,6 +275,12 @@ export default function App() {
               mastered: !w.mastered,
               reviewCount: w.reviewCount + 1,
               lastReviewedAt: getTodayDateString(),
+              // Compute next review date based on review count with default mastery 50
+              nextReviewDate: computeNextReviewDate(
+                getTodayDateString(),
+                50, // default medium mastery
+                w.reviewCount + 1
+              ),
             }
           : w
       )

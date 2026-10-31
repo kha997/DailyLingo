@@ -17,23 +17,23 @@ export function getYesterdayDateString(): string {
 }
 
 export const INITIAL_USER_STATS: UserStats = {
-  xp: 180,
-  level: 2,
-  currentStreak: 3,
-  longestStreak: 5,
-  lastStudyDate: getTodayDateString(),
-  studyDays: [getYesterdayDateString(), getTodayDateString()],
-  todayExercisesDone: 2,
+  xp: 0,
+  level: 1,
+  currentStreak: 0,
+  longestStreak: 0,
+  lastStudyDate: null,
+  studyDays: [],
+  todayExercisesDone: 0,
   dailyGoal: 5,
   dailyXpGoal: 50,
-  totalExercisesCompleted: 14,
-  correctAnswersCount: 12,
-  timeSpentMinutes: 28,
+  totalExercisesCompleted: 0,
+  correctAnswersCount: 0,
+  timeSpentMinutes: 0,
   skillMastery: {
-    vocabulary: 65,
-    grammar: 55,
-    listening: 60,
-    speaking: 45,
+    vocabulary: 0,
+    grammar: 0,
+    listening: 0,
+    speaking: 0,
   },
   audioAccent: 'en-US',
   audioRate: 0.95,
@@ -41,10 +41,7 @@ export const INITIAL_USER_STATS: UserStats = {
   reminderEnabled: false,
   reminderTime: '20:00',
   lastReminderSentDate: null,
-  dailyXpHistory: {
-    [getYesterdayDateString()]: 45,
-    [getTodayDateString()]: 30,
-  },
+  dailyXpHistory: {},
 };
 
 export function loadUserStats(): UserStats {
@@ -60,13 +57,14 @@ export function loadUserStats(): UserStats {
     if (parsed.lastStudyDate !== today) {
       // It's a new day
       const yesterday = getYesterdayDateString();
-      // If last study was yesterday, maintain streak; if older, reset streak
+      // If last study was yesterday, maintain streak; if older or never studied, reset streak
       if (parsed.lastStudyDate === yesterday) {
         // Continued streak - keep current streak count
-      } else if (parsed.lastStudyDate === null || parsed.lastStudyDate !== today) {
-        // Missed yesterday or first time -> reset streak to 1 (will be set when user studies today)
-        parsed.currentStreak = 1;
+      } else if (parsed.lastStudyDate !== null) {
+        // Missed yesterday (studied before but not yesterday) -> reset streak to 0
+        parsed.currentStreak = 0;
       }
+      // If lastStudyDate is null (brand new user), streak stays 0
       // Always reset today's exercise count for the new day
       parsed.todayExercisesDone = 0;
     }

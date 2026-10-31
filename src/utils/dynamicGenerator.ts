@@ -403,34 +403,26 @@ export function generateDynamicExerciseSet(params: {
  * Attempt AI enhancement - this would call the Gemini API in production
  * For now, simulates AI behavior with rate limiting and fallback
  */
+/**
+ * Attempt AI enhancement - checks if AI is configured and available
+ * Returns true if AI should be used, false for procedural generation
+ * 
+ * In production: would call googleGenerativeAI().generateContent(...)
+ * For this release: procedural-only. AI labeling is transparent -
+ * exercises marked 'procedural' come from the template library, not Gemini.
+ */
 function attemptAIEnhancement(
   topic: string,
   level: CEFRLevel,
   skillFocus: string,
   questionCount: number
 ): boolean {
-  // Rate limiting check
-  // In production: check user's request count from storage
-  // For now: simulate rate limiting
-  const randomRateLimitHit = Math.random() < 0.3; // 30% chance to simulate rate limit
-
-  if (randomRateLimitHit) {
-    console.log('AI rate limit hit, falling back to procedural generation');
-    return false;
-  }
-
-  // Simulate AI call delay
-  // In production: await googleGenerativeAI().generateContent(...)
-  console.log(`AI generated exercise set: topic="${topic}", level=${level}, skill=${skillFocus}, count=${questionCount}`);
-
-  // Simulate occasional AI failure (10% chance)
-  if (Math.random() < 0.1) {
-    console.log('AI generation failed, falling back to procedural');
-    return false;
-  }
-
-  return true;
+  // This release uses procedural generation only.
+  // If Gemini API is configured in the future, this would return true
+  // when isAPIConfigured() is enabled, otherwise always procedural.
+  return false;
 }
+
 
 /**
  * Helper to shuffle an array

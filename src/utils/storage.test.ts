@@ -39,14 +39,14 @@ describe('storage utilities', () => {
   });
 
   describe('INITIAL_USER_STATS', () => {
-    it('has expected default properties', () => {
-      expect(INITIAL_USER_STATS.xp).toBe(180);
-      expect(INITIAL_USER_STATS.level).toBe(2);
-      expect(INITIAL_USER_STATS.currentStreak).toBe(3);
-      expect(INITIAL_USER_STATS.longestStreak).toBe(5);
-      expect(typeof INITIAL_USER_STATS.lastStudyDate).toBe('string');
+    it('has expected default properties for new user', () => {
+      expect(INITIAL_USER_STATS.xp).toBe(0);
+      expect(INITIAL_USER_STATS.level).toBe(1);
+      expect(INITIAL_USER_STATS.currentStreak).toBe(0);
+      expect(INITIAL_USER_STATS.longestStreak).toBe(0);
+      expect(INITIAL_USER_STATS.lastStudyDate).toBeNull();
       expect(Array.isArray(INITIAL_USER_STATS.studyDays)).toBe(true);
-      expect(INITIAL_USER_STATS.todayExercisesDone).toBe(2);
+      expect(INITIAL_USER_STATS.todayExercisesDone).toBe(0);
       expect(INITIAL_USER_STATS.dailyGoal).toBe(5);
       expect(INITIAL_USER_STATS.dailyXpGoal).toBe(50);
     });
@@ -112,8 +112,8 @@ describe('storage utilities', () => {
         currentStreak: 5,
       }));
       const result = loadUserStats();
-      // Streak should reset
-      expect(result.currentStreak).toBe(1);
+      // Streak should reset since last study was not yesterday
+      expect(result.currentStreak).toBe(0);
       expect(result.todayExercisesDone).toBe(0);
     });
   });
