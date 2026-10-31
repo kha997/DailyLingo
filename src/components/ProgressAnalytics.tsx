@@ -61,7 +61,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
   for (let i = 13; i >= 0; i--) {
     const d = new Date();
     d.setDate(today.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = d.toLocaleDateString('en-CA');
     const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
     const isActive = userStats.studyDays.includes(dateStr);
     daysList.push({
@@ -88,7 +88,7 @@ export const ProgressAnalytics: React.FC<ProgressAnalyticsProps> = ({
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(now.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = d.toLocaleDateString('en-CA');
       const isToday = i === 0;
       const dayLabel = isToday
         ? 'Hôm nay'

@@ -36,6 +36,8 @@ interface ExerciseRunnerProps {
     correct: number;
     earnedXp: number;
     exerciseType: string;
+    /** English words shown in this session, used to reschedule spaced repetition. */
+    reviewedWords?: string[];
   }) => void;
   onClose: () => void;
   savedWords: SavedWord[];
@@ -342,7 +344,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
       playTadaSound();
 
       // Check if session XP reaches or completes daily XP goal
-      const todayDateStr = new Date().toISOString().split('T')[0];
+      const todayDateStr = getTodayDateString();
       const dailyXpGoal = userStats.dailyXpGoal || 50;
       const currentTodayXp =
         userStats.dailyXpHistory?.[todayDateStr] ??
@@ -375,7 +377,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
         ? Math.round((sessionScore.correct / sessionScore.total) * 100)
         : 100;
 
-    const todayDateStr = new Date().toISOString().split('T')[0];
+    const todayDateStr = getTodayDateString();
     const dailyXpGoal = userStats.dailyXpGoal || 50;
     const currentTodayXp =
       userStats.dailyXpHistory?.[todayDateStr] ??
@@ -462,6 +464,9 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                 correct: sessionScore.correct,
                 earnedXp: sessionScore.xp,
                 exerciseType: currentExercise?.type || 'mixed',
+                reviewedWords: exercises
+                  .filter((ex) => ex.type === 'flashcard' && !!ex.word)
+                  .map((ex) => ex.word as string),
               });
             }}
             className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
@@ -477,7 +482,10 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 bg-slate-900/50 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden my-auto transition-colors">
+      <div
+        data-testid="exercise-runner"
+        className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden my-auto transition-colors"
+      >
         {/* Header with Progress */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -641,7 +649,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                               topic: currentExercise.topic,
                               mastered: false,
                               reviewCount: 1,
-                              lastReviewedAt: new Date().toISOString().split('T')[0],
+                              lastReviewedAt: getTodayDateString(),
                               nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0), // Day 1 review
                             });
                           }

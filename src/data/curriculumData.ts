@@ -1467,7 +1467,7 @@ export function computeNextReviewDate(lastReviewed: string, mastery: number, rev
     nextDate.setDate(nextDate.getDate() + 1);
   }
 
-  return nextDate.toISOString().split('T')[0];
+  return nextDate.toLocaleDateString('en-CA');
 }
 
 // Helper to shuffle an array

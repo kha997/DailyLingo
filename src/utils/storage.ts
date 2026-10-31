@@ -7,13 +7,13 @@ const BADGES_KEY = 'dailylingo_badges';
 
 export function getTodayDateString(): string {
   const today = new Date();
-  return today.toISOString().split('T')[0];
+  return today.toLocaleDateString('en-CA');
 }
 
 export function getYesterdayDateString(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split('T')[0];
+  return yesterday.toLocaleDateString('en-CA');
 }
 
 export const INITIAL_USER_STATS: UserStats = {
