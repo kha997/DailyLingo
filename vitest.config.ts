@@ -10,6 +10,6 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
     },
-    exclude: ['e2e-tests/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e-tests/**'],
   },
 });
