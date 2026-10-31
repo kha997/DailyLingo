@@ -1,4 +1,5 @@
 import { UserStats } from '../types/index.ts';
+import { getTodayDateString } from './storage.ts';
 import { soundFX } from './speech.ts';
 
 export type NotificationSupportStatus = 'supported' | 'unsupported';
@@ -75,7 +76,7 @@ export function checkAndTriggerDailyReminder(
   if (!isNotificationSupported() || Notification.permission !== 'granted') return false;
 
   const now = new Date();
-  const todayDateStr = now.toISOString().split('T')[0];
+  const todayDateStr = getTodayDateString();
 
   // Already sent today
   if (userStats.lastReminderSentDate === todayDateStr) {

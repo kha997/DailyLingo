@@ -2,6 +2,7 @@ import React from 'react';
 import { Play, CheckCircle2, Zap, Target, Wand2, Trophy, Sparkles, Star, Award, Volume2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { UserStats } from '../types/index.ts';
+import { getTodayDateString } from '../utils/storage.ts';
 import { playDingSound, playPopSound, playClickSound } from '../utils/audioEffects.ts';
 
 interface DailyHeroSectionProps {
@@ -17,7 +18,7 @@ export const DailyHeroSection: React.FC<DailyHeroSectionProps> = ({
   onOpenStreakModal,
   onOpenCustomPracticeModal,
 }) => {
-  const todayDateStr = new Date().toISOString().split('T')[0];
+  const todayDateStr = getTodayDateString();
   const dailyXpGoal = userStats.dailyXpGoal || 50;
   const todayXp = userStats.dailyXpHistory?.[todayDateStr] ?? Math.max(0, userStats.todayExercisesDone * 15);
   const xpPercentage = Math.min(100, Math.round((todayXp / dailyXpGoal) * 100));

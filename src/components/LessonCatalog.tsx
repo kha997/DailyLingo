@@ -58,6 +58,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
           return (
             <div
               key={unit.id}
+              data-testid="lesson-unit-card"
               className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs hover:border-indigo-300 dark:hover:border-indigo-500/60 transition-all flex flex-col justify-between group"
             >
               <div>

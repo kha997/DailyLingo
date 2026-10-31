@@ -49,8 +49,10 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
   const [newLevel, setNewLevel] = useState<CEFRLevel>('A2');
   const [newTopic, setNewTopic] = useState<TopicCategory>('daily');
 
-  const todayDateStr = new Date().toISOString().split('T')[0];
-const filteredWords = savedWords.filter((w) => {
+  const todayDateStr = getTodayDateString();
+  // The notebook shows every saved word so newly added words are immediately
+  // visible. Spaced repetition only controls which words are *due* for review.
+  const visibleWords = savedWords.filter((w) => {
     const matchSearch =
       w.word.toLowerCase().includes(searchTerm.toLowerCase()) ||
       w.meaningVi.toLowerCase().includes(searchTerm.toLowerCase());
@@ -58,10 +60,10 @@ const filteredWords = savedWords.filter((w) => {
     const matchStatus =
       selectedStatus === 'all' ||
       (selectedStatus === 'mastered' ? w.mastered : !w.mastered);
-    // Spaced repetition: only show words due for review (nextReviewDate <= today)
-    const isDueForReview = new Date(w.nextReviewDate) <= new Date(todayDateStr);
-    return matchSearch && matchLevel && matchStatus && isDueForReview;
+    return matchSearch && matchLevel && matchStatus;
   });
+  // nextReviewDate is stored as YYYY-MM-DD, so lexical comparison is safe.
+  const dueWords = visibleWords.filter((w) => w.nextReviewDate <= todayDateStr);
 
   const masteredCount = savedWords.filter((w) => w.mastered).length;
   const learningCount = savedWords.length - masteredCount;
@@ -123,7 +125,7 @@ const filteredWords = savedWords.filter((w) => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onStartReviewSession(filteredWords.length > 0 ? filteredWords : savedWords)}
+            onClick={() => onStartReviewSession(dueWords.length > 0 ? dueWords : savedWords)}
             disabled={savedWords.length === 0}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors"
           >
@@ -199,7 +201,7 @@ const filteredWords = savedWords.filter((w) => {
       </div>
 
       {/* Word Cards Grid */}
-      {filteredWords.length === 0 ? (
+      {visibleWords.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center transition-colors">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Không tìm thấy từ vựng phù hợp
@@ -210,7 +212,7 @@ const filteredWords = savedWords.filter((w) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredWords.map((word) => (
+          {visibleWords.map((word) => (
             <div
               key={word.id}
               className={`bg-white dark:bg-slate-900 rounded-xl border p-5 transition-all shadow-2xs flex flex-col justify-between ${

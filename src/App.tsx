@@ -117,6 +117,7 @@ export default function App() {
     correct: number;
     earnedXp: number;
     exerciseType: string;
+    reviewedWords?: string[];
   }) => {
     setActiveSession(null);
 
@@ -181,6 +182,24 @@ export default function App() {
         dailyXpHistory: updatedDailyHistory,
       };
     });
+
+    // Reschedule saved words reviewed in this session (spaced repetition).
+    const reviewedWords = result.reviewedWords ?? [];
+    if (reviewedWords.length > 0) {
+      const normalizedWords = new Set(reviewedWords.map((word) => word.toLowerCase()));
+      setSavedWords((prevWords) =>
+        prevWords.map((word) => {
+          if (!normalizedWords.has(word.word.toLowerCase())) return word;
+          const nextReviewCount = word.reviewCount + 1;
+          return {
+            ...word,
+            reviewCount: nextReviewCount,
+            lastReviewedAt: today,
+            nextReviewDate: computeNextReviewDate(today, 50, nextReviewCount),
+          };
+        })
+      );
+    }
 
     // Check Badge Progress
     setBadges((prevBadges) =>
