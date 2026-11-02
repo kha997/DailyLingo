@@ -12,16 +12,17 @@ evidence produced in this environment.
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
-| Proposed commit (PR #5 head) | `4494855aec9e960f8b9ee4f9281aeb1e4c887196` |
+| Proposed commit (PR #5 head, final) | `740276767322d9259599455380d433cf8ee12659` |
 | Work location | branch `beta-readiness`, based on the baseline |
 | Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
 | Baseline hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41208027377> (4 jobs green) |
-| Proposed commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
+| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41372504556> (4 jobs green, conclusion success) |
+| Earlier hardening commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
 | Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) |
 | Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; deploy, repo settings, merge not authorized |
 
-The proposed commit `4494855` is the commit this acceptance doc and the PR were
-updated against after the final hardening pass.
+The final PR head is `7402767` (docs update after the first CI run); the hardening
+commit it contains is `4494855aec9e960f8b9ee4f9281aeb1e4c887196`.
 
 ## Outcome matrix
 
@@ -204,10 +205,11 @@ deploy decision.
 ### 9. Independent review + green CI, no P0/P1 — BLOCKED
 
 - PR #5 is open from `beta-readiness` → `main` at commit
+  `740276767322d9259599455380d433cf8ee12659` (head), containing hardening commit
   `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, titled “Beta readiness hardening for
   Issue #4 acceptance”.
-- Hosted CI run [41372184104](https://github.com/kha997/DailyLingo/actions/runs/41372184104)
-  on that commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
+- Hosted CI run [41372504556](https://github.com/kha997/DailyLingo/actions/runs/41372504556)
+  on that final commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
   `build`, `e2e` (e2e ran the production build via the uploaded artifact).
 - Local typecheck, unit/coverage, timezone matrix, build, bundle budget, and Playwright
   all pass. That is maintainer-side evidence, not independence.
@@ -218,6 +220,8 @@ deploy decision.
   mitigated). All applied and re-verified.
 - All fixed findings from that pass were re-verified with a fresh local gate run
   (`npm run verify` → 149 unit tests; Playwright 16/16 dev + preview).
+- Hosted CI re-ran green on the docs-only follow-up commit
+  `740276767322d9259599455380d433cf8ee12659` (run 41372504556, success).
 
   Current run on the PR: hosted CI on the proposed commit = green, no P0/P1.
 
