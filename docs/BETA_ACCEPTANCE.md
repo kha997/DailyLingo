@@ -16,16 +16,16 @@ OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted C
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
-| Proposed commit (PR #5 head, final) | `4e2b982624e6194fe4cc68585ecfdca52404edf3` |
+| Proposed commit (PR #5 head, final) | `afeb5f91b8deec5cefffb885ff9115697194bc75` |
 | Work location | branch `beta-readiness`, based on the baseline |
 | Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
 | Baseline hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41208027377> (4 jobs green) |
-| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41373576927> (4 jobs green, conclusion success) |
+| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41373657995> (4 jobs green, conclusion success) |
 | Earlier hardening commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
 | Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) |
 | Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; deploy, repo settings, merge not authorized |
 
-The final PR head is `4e2b982624e6194fe4cc68585ecfdca52404edf3`; it contains the hardening commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196`.
+The final PR head is `afeb5f91b8deec5cefffb885ff9115697194bc75`; it contains the hardening commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196`.
 
 ## Outcome matrix
 
@@ -208,10 +208,10 @@ deploy decision.
 ### 9. Independent review + green CI, no P0/P1 — BLOCKED
 
 - PR #5 is open from `beta-readiness` → `main` at commit
-  `4e2b982624e6194fe4cc68585ecfdca52404edf3` (head), containing hardening commit
+  `afeb5f91b8deec5cefffb885ff9115697194bc75` (head), containing hardening commit
   `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, titled “Beta readiness hardening for
   Issue #4 acceptance”.
-- Hosted CI run [41373576927](https://github.com/kha997/DailyLingo/actions/runs/41373576927)
+- Hosted CI run [41373657995](https://github.com/kha997/DailyLingo/actions/runs/41373657995)
   on that final commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
   `build`, `e2e` (e2e ran the production build via the uploaded artifact).
 - Local typecheck, unit/coverage, timezone matrix, build, bundle budget, and Playwright
@@ -224,7 +224,7 @@ deploy decision.
 - All fixed findings from that pass were re-verified with a fresh local gate run
   (`npm run verify` → 149 unit tests; Playwright 16/16 dev + preview).
 - Hosted CI re-ran green on the docs-only follow-up commits (`740276767…` run
-  41372504556; `9da980a6…` run 41373576927).
+  41372504556; `afeb5f91…` run 41373657995).
 
   Current run on the PR: hosted CI on the proposed commit = green, no P0/P1.
 
