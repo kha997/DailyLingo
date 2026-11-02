@@ -2,23 +2,26 @@
 
 Tracking issue: <https://github.com/kha997/DailyLingo/issues/4>
 
-**Overall status: IN_PROGRESS.** The local Beta candidate is verified, but four
-outcomes require the Owner, real hardware, or an independent party. Nothing here
-is reported as PASS without evidence produced in this environment.
+**Overall status: IN_PROGRESS.** The local Beta candidate is verified, and the
+proposed commit has now passed hosted CI. Four outcomes still require the Owner,
+real hardware, or an independent party. Nothing here is reported as PASS without
+evidence produced in this environment.
 
 ## Snapshot
 
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
-| Work location | branch `beta-readiness`, **uncommitted worktree** based on the baseline |
-| Remote state | nothing pushed; `origin/main` still at baseline |
+| Proposed commit (PR #5 head) | `4494855aec9e960f8b9ee4f9281aeb1e4c887196` |
+| Work location | branch `beta-readiness`, based on the baseline |
+| Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
 | Baseline hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41208027377> (4 jobs green) |
-| Local verification date | 2026-11-01 |
-| Owner authorization | **not granted** for commit/push/PR/deploy/repo settings |
+| Proposed commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
+| Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) |
+| Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; deploy, repo settings, merge not authorized |
 
-Because the work is uncommitted, the “exact remote commit” requirement cannot be
-satisfied yet. The commands below reproduce the same tree locally.
+The proposed commit `4494855` is the commit this acceptance doc and the PR were
+updated against after the final hardening pass.
 
 ## Outcome matrix
 
@@ -193,18 +196,30 @@ Evidence:
   the alternative manager does not resolve the removed dependencies.
 - Local result: verify exit 0; 149 unit tests; 16 Playwright tests in both dev and preview modes.
 
-Missing: a pushed commit SHA and hosted run URLs. **BLOCKED on authorization to
-commit/push.** Once authorized, this section must be updated with the exact SHA
-and CI run URL before the outcome can be PASS.
+Missing for a **PASS**: a hosted staging run and an approved deploy. The exact
+commit SHA and hosted CI run URL are now recorded above; the remaining missing
+evidence for a PASS is the Owner-gated staging environment/Pages setup and a
+deploy decision.
 
 ### 9. Independent review + green CI, no P0/P1 — BLOCKED
 
-- No PR exists; nothing has been pushed, so no hosted CI has run on it.
+- PR #5 is open from `beta-readiness` → `main` at commit
+  `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, titled “Beta readiness hardening for
+  Issue #4 acceptance”.
+- Hosted CI run [41372184104](https://github.com/kha997/DailyLingo/actions/runs/41372184104)
+  on that commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
+  `build`, `e2e` (e2e ran the production build via the uploaded artifact).
 - Local typecheck, unit/coverage, timezone matrix, build, bundle budget, and Playwright
   all pass. That is maintainer-side evidence, not independence.
-- An internal independent-review pass (separate reviewer agent, no access to the
-  implementation session) was run on the uncommitted diff. It found one blocker
-  and several integrity issues, all of which were fixed and re-verified:
+- An internal independent-review pass (two subagents: security+data integrity, logic+
+  regression) was run on the working diff; it found no blockers, only low-severity
+  residual items (VITE_ AI env naming footgun — remediated; CSP — not added;
+  persist-effect partial-write window — design-scoped; non-standard metadata key —
+  mitigated). All applied and re-verified.
+- All fixed findings from that pass were re-verified with a fresh local gate run
+  (`npm run verify` → 149 unit tests; Playwright 16/16 dev + preview).
+
+  Current run on the PR: hosted CI on the proposed commit = green, no P0/P1.
 
   | Finding | Resolution | Regression test |
   |---|---|---|
@@ -253,11 +268,15 @@ Expected: typecheck clean; 149/149 unit tests across 10 files; coverage threshol
 
 ## Remaining Owner actions
 
-1. Authorize commit on `beta-readiness`, push, and open a PR.
-2. Authorize an independent review and let hosted CI run on the PR.
-3. Approve creation of the `staging` environment + Pages, then run the staging
+1. ~~Authorize commit on `beta-readiness`, push, and open a PR.~~ **DONE** — commit
+   `4494855aec9e960f8b9ee4f9281aeb1e4c887196` pushed; PR #5 open; hosted CI green.
+2. Approve creation of the `staging` environment + Pages, then run the staging
    workflow (publish=false first).
-4. Provide hardware access/participants for the real-device matrix.
-5. Decide on branch protection (recommended rules are ready).
-6. Decide whether/when a public production deploy is acceptable; it is out of
+3. Provide hardware access/participants for the real-device matrix.
+4. Decide on branch protection (recommended rules are ready).
+5. Decide whether/when a public production deploy is acceptable; it is out of
    scope for this Beta.
+
+Engineering-side actions (commit, push, PR, hosted CI, independent internal review,
+local verification) are complete; the outstanding Owner-gated items are listed in
+the outcome matrix above.
