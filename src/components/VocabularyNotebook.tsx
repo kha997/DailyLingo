@@ -117,7 +117,7 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
           <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mt-1">
             <span>Tổng cộng: <strong className="font-mono text-slate-800 dark:text-slate-200 tabular-nums">{savedWords.length}</strong> từ</span>
             <span aria-hidden="true">·</span>
-            <span>Đã thuộc: <strong className="font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">{masteredCount}</strong></span>
+            <span>Đã thuộc: <strong className="font-mono text-emerald-700 dark:text-emerald-400 tabular-nums">{masteredCount}</strong></span>
             <span aria-hidden="true">·</span>
             <span>Đang học: <strong className="font-mono text-indigo-600 dark:text-indigo-400 tabular-nums">{learningCount}</strong></span>
           </div>
@@ -147,13 +147,13 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 flex flex-col md:flex-row gap-4 justify-between items-center transition-colors">
         {/* Search Input */}
         <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Tìm kiếm từ tiếng Anh hoặc nghĩa..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors placeholder:text-slate-500 dark:placeholder:text-slate-500"
           />
         </div>
 
@@ -206,7 +206,7 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Không tìm thấy từ vựng phù hợp
           </p>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Thử thay đổi từ khóa tìm kiếm hoặc bấm &quot;Thêm Từ Mới&quot; để bổ sung vào sổ tay.
           </p>
         </div>
@@ -238,12 +238,12 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
                       className={`p-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors ${
                         word.mastered
                           ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50'
-                          : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
                       }`}
                       title={word.mastered ? 'Đã thuộc (Bấm để chuyển sang đang học)' : 'Đánh dấu đã thuộc'}
                     >
                       {word.mastered ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 fill-emerald-100 dark:fill-emerald-950/50" />
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 fill-emerald-100 dark:fill-emerald-950/50" />
                       ) : (
                         <Circle className="w-4 h-4" />
                       )}
@@ -251,7 +251,7 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
 
                     <button
                       onClick={() => onDeleteWord(word.id)}
-                      className="p-1 rounded-md text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                      className="p-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                       title="Xóa từ khỏi sổ tay"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -273,7 +273,7 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
                   </button>
                 </div>
 
-                <p className="text-xs font-mono text-slate-400 dark:text-slate-500 mb-3">
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-3">
                   {word.ipa}
                 </p>
 
@@ -294,9 +294,9 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
               </div>
 
               {/* Card Footer: Review counter & next review date */}
-              <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+              <div className="pt-3 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                 <span>Ôn tập: {word.reviewCount} lần</span>
-                <span className={word.mastered ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}>
+                <span className={word.mastered ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}>
                   {word.mastered ? '● Đã thành thạo' : '○ Cần ôn thêm'}
                 </span>
                 {(!word.mastered) && (
@@ -320,7 +320,7 @@ export const VocabularyNotebook: React.FC<VocabularyNotebookProps> = ({
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                className="p-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>

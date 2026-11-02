@@ -108,6 +108,9 @@ export interface UserStats {
   dailyXpGoal?: number; // e.g. 30, 50, 100 XP
   totalExercisesCompleted: number;
   correctAnswersCount: number;
+  /** Answers that were actually graded (excludes dialogue/self-verified speaking). */
+  gradedAnswersCount?: number;
+  gradedCorrectCount?: number;
   timeSpentMinutes: number;
   skillMastery: {
     vocabulary: number; // 0 - 100
@@ -133,4 +136,34 @@ export interface LessonUnit {
   image?: string;
   estimatedMinutes: number;
   exercises: ExerciseItem[];
+}
+
+export type SkillKey = keyof UserStats['skillMastery'];
+
+export interface SkillScore {
+  correct: number;
+  total: number;
+}
+
+/**
+ * The single source of truth for one finished practice session.
+ *
+ * `total`/`correct` only count graded answers. `completed` also includes
+ * unscored activities (dialogue, self-verified speaking) so progress can be
+ * honest without inflating accuracy.
+ */
+export interface SessionResult {
+  total: number;
+  correct: number;
+  completed: number;
+  earnedXp: number;
+  exerciseType: string;
+  /** Saved words the learner marked “đã nhớ”. */
+  reviewedWords: string[];
+  /** Saved words the learner marked “cần ôn lại”. */
+  struggledWords?: string[];
+  skillBreakdown: Partial<Record<SkillKey, SkillScore>>;
+  durationSeconds: number;
+  speakingBestScore: number | null;
+  speakingAttempts: number;
 }

@@ -12,38 +12,50 @@ import {
   ArrowRight,
   BookmarkCheck,
   Info,
-  Trophy,
+  AlertCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ExerciseItem, SavedWord, UserStats } from '../types/index.ts';
+import { prefersReducedMotion } from '../utils/motion.ts';
+import { ExerciseItem, SavedWord, UserStats, SessionResult, SkillKey, SkillScore } from '../types/index.ts';
 import { speakEnglish, calculateSimilarity, SpeechRecognizer } from '../utils/speech.ts';
-import { isNotificationSupported } from '../utils/notifications.ts';
 import { computeNextReviewDate } from '../data/curriculumData.ts';
 import { getTodayDateString } from '../utils/storage.ts';
 import {
   playPopSound,
   playTadaSound,
-  playDingSound,
   playWrongSound,
   playClickSound,
 } from '../utils/audioEffects.ts';
 
+export type { SessionResult, SkillScore, SkillKey } from '../types/index.ts';
+
 interface ExerciseRunnerProps {
   exercises: ExerciseItem[];
   title: string;
-  onFinish: (result: {
-    total: number;
-    correct: number;
-    earnedXp: number;
-    exerciseType: string;
-    /** English words shown in this session, used to reschedule spaced repetition. */
-    reviewedWords?: string[];
-  }) => void;
+  onFinish: (result: SessionResult) => void;
   onClose: () => void;
   savedWords: SavedWord[];
   onToggleSaveWord: (word: SavedWord) => void;
   userStats: UserStats;
 }
+
+const SKILL_BY_TYPE: Record<string, SkillKey> = {
+  flashcard: 'vocabulary',
+  'word-reorder': 'grammar',
+  'listening-cloze': 'listening',
+  speaking: 'speaking',
+  quiz: 'grammar',
+  dialogue: 'listening',
+};
+
+interface ScoreState {
+  correct: number;
+  total: number;
+  xp: number;
+  skills: Partial<Record<SkillKey, SkillScore>>;
+}
+
+const emptyScore = (): ScoreState => ({ correct: 0, total: 0, xp: 0, skills: {} });
 
 export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
   exercises,
@@ -55,17 +67,34 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
   userStats,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [sessionScore, setSessionScore] = useState({ correct: 0, total: 0, xp: 0 });
+  const [sessionScore, setSessionScore] = useState<ScoreState>(emptyScore);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [finalResult, setFinalResult] = useState<SessionResult | null>(null);
+
+  const scoreRef = useRef<ScoreState>(emptyScore());
+  const resolvedIdsRef = useRef<Set<string>>(new Set());
+  const completedIdsRef = useRef<Set<string>>(new Set());
+  const completedCountRef = useRef(0);
+  const reviewedWordsRef = useRef<string[]>([]);
+  const struggledWordsRef = useRef<string[]>([]);
+  const startedAtRef = useRef(Date.now());
+  const speakingAttemptsRef = useRef(0);
+  const speakingBestRef = useRef<number | null>(null);
+  const speakingScoredRef = useRef(false);
+  const activeSpeechExerciseRef = useRef<string | null>(null);
 
   // Exercise Specific States
   // Flashcard
   const [isFlipped, setIsFlipped] = useState(false);
+  const [hasFlipped, setHasFlipped] = useState(false);
+  const [flashcardHint, setFlashcardHint] = useState(false);
 
   // Word reorder
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
   const [availableWords, setAvailableWords] = useState<{ id: string; word: string }[]>([]);
   const [reorderStatus, setReorderStatus] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const [reorderAttempts, setReorderAttempts] = useState(0);
+  const [reorderRevealed, setReorderRevealed] = useState(false);
 
   // Listening Cloze
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -86,13 +115,89 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
   // Audio playing
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [activeSpeed, setActiveSpeed] = useState<number | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const currentExercise = exercises[currentIndex];
+
+  const handleClose = () => {
+    activeSpeechExerciseRef.current = null;
+    recognizerRef.current?.abort();
+    setIsRecording(false);
+    onClose();
+  };
+
+  // Closing mid-session throws away every answer in this run (only a finished
+  // session is persisted). Warn before doing that silently.
+  const requestClose = () => {
+    if (completedCountRef.current > 0 || scoreRef.current.total > 0) {
+      setShowExitConfirm(true);
+      return;
+    }
+    handleClose();
+  };
+
+  const recordAnswer = (skill: SkillKey, correct: boolean, xp: number) => {
+    const exerciseId = currentExercise?.id;
+    if (exerciseId && resolvedIdsRef.current.has(exerciseId)) return;
+    if (exerciseId) resolvedIdsRef.current.add(exerciseId);
+
+    const next = scoreRef.current;
+    next.total += 1;
+    if (correct) next.correct += 1;
+    next.xp += xp;
+    const skillScore = next.skills[skill] ?? { correct: 0, total: 0 };
+    skillScore.total += 1;
+    if (correct) skillScore.correct += 1;
+    next.skills[skill] = skillScore;
+    setSessionScore({
+      correct: next.correct,
+      total: next.total,
+      xp: next.xp,
+      skills: { ...next.skills },
+    });
+  };
+
+  const markCompleted = () => {
+    const exerciseId = currentExercise?.id;
+    if (!exerciseId) return;
+    // Retrying a wrong answer must not count the exercise twice.
+    if (completedIdsRef.current.has(exerciseId)) return;
+    completedIdsRef.current.add(exerciseId);
+    completedCountRef.current += 1;
+  };
+
+  const buildResult = (): SessionResult => {
+    const types = new Set(exercises.map((e) => e.type));
+    return {
+      total: scoreRef.current.total,
+      correct: scoreRef.current.correct,
+      completed: completedCountRef.current,
+      earnedXp: scoreRef.current.xp,
+      exerciseType: types.size === 1 ? [...types][0] : 'mixed',
+      reviewedWords: [...reviewedWordsRef.current],
+      struggledWords: [...struggledWordsRef.current],
+      skillBreakdown: { ...scoreRef.current.skills },
+      durationSeconds: Math.max(0, Math.round((Date.now() - startedAtRef.current) / 1000)),
+      speakingBestScore: speakingBestRef.current,
+      speakingAttempts: speakingAttemptsRef.current,
+    };
+  };
 
   // Initialize current exercise
   useEffect(() => {
     if (!currentExercise) return;
+
+    // Any microphone session belongs to the exercise we just left. Reset the
+    // per-exercise speaking latch and abort the recogniser so lingering audio
+    // cannot score the next item.
+    speakingScoredRef.current = false;
+    activeSpeechExerciseRef.current = null;
+    recognizerRef.current?.abort();
+    setIsRecording(false);
+
     setIsFlipped(false);
+    setHasFlipped(false);
+    setFlashcardHint(false);
     setSelectedOption(null);
     setClozeStatus('idle');
     setSelectedQuizOpt(null);
@@ -102,12 +207,14 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
     setSpeakingMatches([]);
     setSpeakingError(null);
     setReorderStatus('idle');
+    setReorderAttempts(0);
+    setReorderRevealed(false);
+    setIsRecording(false);
 
     if (currentExercise.type === 'word-reorder' && currentExercise.scrambledWords) {
       setSelectedWords([]);
-      // Shuffle words slightly to make it engaging
       const wordsWithIds = currentExercise.scrambledWords.map((w, i) => ({
-        id: `${w}-${i}-${Date.now()}`,
+        id: `${w}-${i}-${currentExercise.id}`,
         word: w,
       }));
       setAvailableWords(wordsWithIds);
@@ -121,6 +228,18 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
       return () => clearTimeout(timer);
     }
   }, [currentIndex, currentExercise]);
+
+  // Stop the microphone when the runner unmounts or the tab closes.
+  useEffect(() => {
+    return () => {
+      recognizerRef.current?.abort();
+    };
+  }, []);
+
+  // Keep the recognizer accent in sync with settings.
+  useEffect(() => {
+    recognizerRef.current?.setAccent(userStats.audioAccent);
+  }, [userStats.audioAccent]);
 
   const handlePlayAudio = async (text: string, rate?: number) => {
     if (!text) return;
@@ -152,17 +271,31 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
     return savedWords.some((w) => w.word.toLowerCase() === wordStr.toLowerCase());
   };
 
+  const handleFlipCard = () => {
+    playClickSound();
+    setIsFlipped((prev) => {
+      const next = !prev;
+      if (next) setHasFlipped(true);
+      return next;
+    });
+    setFlashcardHint(false);
+  };
+
   const handleFlashcardReview = (understood: boolean) => {
     playClickSound();
-    const gained = understood ? 15 : 5;
+    if (!hasFlipped) {
+      setFlashcardHint(true);
+      return;
+    }
+    const gained = understood ? 15 : 0;
     if (understood) playPopSound();
 
-    setSessionScore((prev) => ({
-      correct: prev.correct + (understood ? 1 : 0),
-      total: prev.total + 1,
-      xp: prev.xp + gained,
-    }));
-
+    recordAnswer('vocabulary', understood, gained);
+    if (currentExercise?.word) {
+      if (understood) reviewedWordsRef.current.push(currentExercise.word);
+      else struggledWordsRef.current.push(currentExercise.word);
+    }
+    markCompleted();
     advanceExercise();
   };
 
@@ -199,14 +332,19 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
       playPopSound();
       setReorderStatus('correct');
       handlePlayAudio(currentExercise.targetSentence);
-      setSessionScore((prev) => ({
-        correct: prev.correct + 1,
-        total: prev.total + 1,
-        xp: prev.xp + 15,
-      }));
+      recordAnswer('grammar', true, 15);
+      markCompleted();
     } else {
       playWrongSound();
+      const attempt = reorderAttempts + 1;
+      setReorderAttempts(attempt);
       setReorderStatus('wrong');
+      if (attempt >= 2) {
+        // Two failed attempts: show the answer and record the exercise once.
+        setReorderRevealed(true);
+        recordAnswer('grammar', false, 0);
+        markCompleted();
+      }
     }
   };
 
@@ -219,32 +357,27 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
     if (isCorrect) {
       playPopSound();
       setClozeStatus('correct');
-      setSessionScore((prev) => ({
-        correct: prev.correct + 1,
-        total: prev.total + 1,
-        xp: prev.xp + 15,
-      }));
+      recordAnswer('listening', true, 15);
     } else {
       playWrongSound();
       setClozeStatus('wrong');
-      setSessionScore((prev) => ({
-        correct: prev.correct,
-        total: prev.total + 1,
-        xp: prev.xp + 5,
-      }));
+      recordAnswer('listening', false, 0);
     }
+    markCompleted();
   };
 
   // Handle Speaking practice
   const handleToggleRecord = () => {
     if (!recognizerRef.current) {
-      recognizerRef.current = new SpeechRecognizer();
+      recognizerRef.current = new SpeechRecognizer(userStats.audioAccent);
     }
     const recognizer = recognizerRef.current;
 
     // If speech recognition is not supported, show a friendly message and return
     if (!recognizer.isSupported) {
-      setSpeakingError('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói Web Speech API. Vui lòng sử dụng Chrome hoặc Edge để sử dụng tính năng luyện nói.');
+      setSpeakingError(
+        'Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Web Speech API). Hãy dùng Chrome hoặc Edge, hoặc bấm "Tôi đã đọc to" để tiếp tục mà không chấm điểm.'
+      );
       setIsRecording(false);
       return;
     }
@@ -255,57 +388,70 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
       return;
     }
 
+    if (speakingScoredRef.current) {
+      setSpeakingError('Câu này đã được chấm. Hãy bấm "Tiếp Tục" để sang câu kế tiếp.');
+      return;
+    }
+
     setSpeakingError(null);
     setSpokenTranscript('');
     setSpeakingScore(null);
     setIsRecording(true);
     playClickSound();
 
+    // Pin the callback to the exercise that started it. A late `onresult` from
+    // an aborted or previous exercise must never score (or write a transcript
+    // onto) the item now on screen.
+    const startedForId = currentExercise.id;
+    activeSpeechExerciseRef.current = startedForId;
+
     recognizer.startListening(
       (res) => {
+        if (activeSpeechExerciseRef.current !== startedForId) return;
         setSpokenTranscript(res.transcript);
-        if (res.isFinal && currentExercise.speakingTarget) {
-          const evalResult = calculateSimilarity(res.transcript, currentExercise.speakingTarget);
+        if (
+          res.isFinal &&
+          res.finalTranscript &&
+          currentExercise.speakingTarget &&
+          !speakingScoredRef.current
+        ) {
+          const evalResult = calculateSimilarity(
+            res.finalTranscript,
+            currentExercise.speakingTarget
+          );
+          speakingScoredRef.current = true;
+          speakingAttemptsRef.current += 1;
+          speakingBestRef.current = Math.max(speakingBestRef.current ?? 0, evalResult.score);
           setSpeakingScore(evalResult.score);
           setSpeakingMatches(evalResult.matches);
           setIsRecording(false);
 
-          if (evalResult.score >= 70) {
-            playPopSound();
-            setSessionScore((prev) => ({
-              correct: prev.correct + 1,
-              total: prev.total + 1,
-              xp: prev.xp + 20,
-            }));
-          } else {
-            playWrongSound();
-            setSessionScore((prev) => ({
-              correct: prev.correct,
-              total: prev.total + 1,
-              xp: prev.xp + 5,
-            }));
-          }
+          const passed = evalResult.score >= 70;
+          if (passed) playPopSound();
+          else playWrongSound();
+          recordAnswer('speaking', passed, passed ? 20 : 0);
+          markCompleted();
         }
       },
       (err) => {
-        setSpeakingError(err);
+        if (activeSpeechExerciseRef.current !== startedForId) return;
+        if (err) setSpeakingError(err);
         setIsRecording(false);
       },
       () => {
+        if (activeSpeechExerciseRef.current !== startedForId) return;
         setIsRecording(false);
       }
     );
   };
 
+  // Honest fallback when a learner cannot or does not want to use the microphone.
+  // It advances the session without inventing a score or XP.
   const handleSelfVerifySpeaking = () => {
-    playPopSound();
-    setSpeakingScore(90);
-    setSpeakingMatches([true, true, true, true]);
-    setSessionScore((prev) => ({
-      correct: prev.correct + 1,
-      total: prev.total + 1,
-      xp: prev.xp + 15,
-    }));
+    playClickSound();
+    speakingScoredRef.current = true;
+    markCompleted();
+    advanceExercise();
   };
 
   // Handle Quiz
@@ -319,51 +465,38 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
 
     if (isCorrect) {
       playPopSound();
-      setSessionScore((prev) => ({
-        correct: prev.correct + 1,
-        total: prev.total + 1,
-        xp: prev.xp + 15,
-      }));
+      recordAnswer('grammar', true, 15);
     } else {
       playWrongSound();
-      setSessionScore((prev) => ({
-        correct: prev.correct,
-        total: prev.total + 1,
-        xp: prev.xp + 5,
-      }));
+      recordAnswer('grammar', false, 0);
     }
+    markCompleted();
   };
 
   // Advance to next exercise or complete
   const advanceExercise = () => {
+    // Never carry a live microphone (or its late result) into the next item.
+    activeSpeechExerciseRef.current = null;
+    recognizerRef.current?.abort();
+    setIsRecording(false);
+
     if (currentIndex < exercises.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      // Finished all!
+      // Finished all! Snapshot refs so the summary and persisted result agree.
+      const result = buildResult();
+      setFinalResult(result);
       setIsCompleted(true);
       playTadaSound();
 
-      // Check if session XP reaches or completes daily XP goal
-      const todayDateStr = getTodayDateString();
-      const dailyXpGoal = userStats.dailyXpGoal || 50;
-      const currentTodayXp =
-        userStats.dailyXpHistory?.[todayDateStr] ??
-        Math.max(0, userStats.todayExercisesDone * 15);
-      const newTodayXp = currentTodayXp + sessionScore.xp;
-      const reachedGoalNow = newTodayXp >= dailyXpGoal;
-
-      if (reachedGoalNow) {
-        setTimeout(() => {
-          playDingSound();
-        }, 650);
-      }
-
       try {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
+        if (!prefersReducedMotion()) {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        }
       } catch {
         // Ignore
       }
@@ -372,77 +505,67 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
 
   // If session is completed, show celebration card
   if (isCompleted) {
+    const result = finalResult ?? buildResult();
     const accuracy =
-      sessionScore.total > 0
-        ? Math.round((sessionScore.correct / sessionScore.total) * 100)
-        : 100;
-
-    const todayDateStr = getTodayDateString();
-    const dailyXpGoal = userStats.dailyXpGoal || 50;
-    const currentTodayXp =
-      userStats.dailyXpHistory?.[todayDateStr] ??
-      Math.max(0, userStats.todayExercisesDone * 15);
-    const hasMetDailyGoal = currentTodayXp + sessionScore.xp >= dailyXpGoal;
+      result.total > 0 ? Math.round((result.correct / result.total) * 100) : null;
+    const minutes = Math.floor(result.durationSeconds / 60);
+    const seconds = result.durationSeconds % 60;
+    const durationLabel = minutes > 0 ? `${minutes} phút ${seconds} giây` : `${seconds} giây`;
 
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 sm:p-8 text-center shadow-xl border border-slate-200 dark:border-slate-800 transition-colors animate-in fade-in zoom-in-95">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 mx-auto flex items-center justify-center mb-4">
             <Sparkles className="w-8 h-8" />
           </div>
 
           <h2 className="text-2xl font-display font-bold text-slate-900 dark:text-white mb-1">
-            Tuyệt vời! Hoàn thành xuất sắc!
+            Hoàn thành bài luyện tập!
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
-            Bạn đã nỗ lực hoàn thành bài luyện tập &quot;{title}&quot; hôm nay.
+            Bạn đã hoàn tất &quot;{title}&quot; trong {durationLabel}.
           </p>
 
-          {/* Daily Goal Reached Celebratory Card if achieved */}
-          {hasMetDailyGoal && (
-            <div className="mb-5 p-3 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-emerald-950/40 border border-emerald-300/80 dark:border-emerald-800/80 text-xs flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2 text-left">
-                <Trophy className="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" />
-                <div>
-                  <span className="font-bold text-emerald-800 dark:text-emerald-200 block">
-                    Daily Goal Reached! 🎉
-                  </span>
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400">
-                    Đã cán mốc {dailyXpGoal} XP mục tiêu hôm nay
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => playDingSound()}
-                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition-colors cursor-pointer shrink-0"
-                title="Nghe tiếng chuông ăn mừng! 🔔"
-              >
-                <Volume2 className="w-3 h-3" /> Ding!
-              </button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-750 rounded-xl p-4 mb-4">
+          <div className="grid grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-750 rounded-xl p-4 mb-3">
             <div>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block">Điểm XP</span>
               <span className="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400 tabular-nums">
-                +{sessionScore.xp}
+                +{result.earnedXp}
               </span>
             </div>
             <div>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block">Chính xác</span>
-              <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
-                {accuracy}%
+              <span className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-400 tabular-nums">
+                {accuracy === null ? '—' : `${accuracy}%`}
               </span>
             </div>
             <div>
               <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block">Đã hoàn tất</span>
               <span className="text-xl font-bold font-mono text-slate-800 dark:text-slate-200 tabular-nums">
-                {sessionScore.total} câu
+                {result.completed}/{exercises.length}
               </span>
             </div>
           </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+            {result.total > 0 ? (
+              <>
+                Độ chính xác chỉ tính {result.total} câu được chấm điểm.
+                {result.completed > result.total && (
+                  <> {result.completed - result.total} câu tự đánh giá hoặc hội thoại không tính điểm.</>
+                )}
+              </>
+            ) : (
+              'Bài này không có câu trả lời được chấm điểm, nên không hiển thị độ chính xác.'
+            )}
+          </p>
+
+          {result.speakingBestScore !== null && (
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-4">
+              Khớp câu mẫu tốt nhất khi nói: <strong>{result.speakingBestScore}%</strong>
+              {result.speakingAttempts > 1 && <> · {result.speakingAttempts} lượt đọc</>}
+            </p>
+          )}
 
           <div className="flex items-center justify-center gap-2 mb-5">
             <button
@@ -459,15 +582,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
           <button
             onClick={() => {
               playClickSound();
-              onFinish({
-                total: sessionScore.total,
-                correct: sessionScore.correct,
-                earnedXp: sessionScore.xp,
-                exerciseType: currentExercise?.type || 'mixed',
-                reviewedWords: exercises
-                  .filter((ex) => ex.type === 'flashcard' && !!ex.word)
-                  .map((ex) => ex.word as string),
-              });
+              onFinish(result);
             }}
             className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-xs transition-colors cursor-pointer"
           >
@@ -478,10 +593,77 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
     );
   }
 
+  // Session config can legitimately produce zero exercises. Never render the
+  // exercise UI with an undefined current item.
+  if (!currentExercise) {
+    return (
+      <div className="fixed inset-0 z-40 bg-slate-900/50 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-xl border border-slate-200 dark:border-slate-800">
+          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center mb-3">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+            Chưa có bài tập phù hợp
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
+            Không tìm thấy bài tập nào cho lựa chọn này. Hãy đổi chủ đề hoặc cấp độ rồi thử lại.
+          </p>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const progressPercent = Math.round(((currentIndex + 1) / exercises.length) * 100);
 
   return (
     <div className="fixed inset-0 z-40 bg-slate-900/50 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      {showExitConfirm && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/70 dark:bg-black/80 flex items-center justify-center p-4"
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exit-confirm-title"
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 text-center shadow-xl border border-slate-200 dark:border-slate-800"
+          >
+            <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center mb-3">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h2 id="exit-confirm-title" className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+              Thoát khi chưa lưu?
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
+              Các câu đã làm trong lượt này chưa được lưu. Nếu thoát bây giờ, XP và kết quả
+              của lượt này sẽ bị bỏ.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirm(false)}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors"
+              >
+                Ở lại làm tiếp
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-sm transition-colors"
+              >
+                Thoát và bỏ lượt này
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div
         data-testid="exercise-runner"
         className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden my-auto transition-colors"
@@ -490,8 +672,9 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              onClick={requestClose}
+              aria-label="Thoát bài tập"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="Thoát bài tập"
             >
               <X className="w-5 h-5" />
@@ -530,14 +713,23 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   Thẻ Từ Vựng Tương Tác
                 </span>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Bấm vào thẻ để lật xem nghĩa tiếng Việt và câu ví dụ
                 </p>
               </div>
 
               {/* 3D Flip Card */}
               <div
-                onClick={() => setIsFlipped(!isFlipped)}
+                role="button"
+                tabIndex={0}
+                aria-label={isFlipped ? 'Lật lại mặt trước của thẻ' : 'Lật thẻ để xem nghĩa'}
+                onClick={handleFlipCard}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleFlipCard();
+                  }
+                }}
                 className="w-full max-w-md h-64 sm:h-72 rounded-2xl p-6 sm:p-8 cursor-pointer select-none transition-all duration-300 flex flex-col justify-between relative shadow-sm border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500 bg-linear-to-b from-white to-slate-50/80 dark:from-slate-800 dark:to-slate-900"
               >
                 {!isFlipped ? (
@@ -587,7 +779,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                       </button>
                     </div>
 
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500 mt-6 flex items-center gap-1">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-6 flex items-center gap-1">
                       <RotateCcw className="w-3 h-3" /> Chạm để lật thẻ
                     </span>
                   </div>
@@ -596,10 +788,10 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                   <div className="flex flex-col justify-between h-full text-left">
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
                           Định Nghĩa & Ý Nghĩa
                         </span>
-                        <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                           {currentExercise.word}
                         </span>
                       </div>
@@ -630,7 +822,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-700 text-xs text-slate-400 dark:text-slate-500">
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
                       <span>Bấm lại để xem mặt trước</span>
                       <button
                         type="button"
@@ -678,24 +870,36 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
               </div>
 
               {/* Action Buttons for Flashcard */}
+              {flashcardHint && !hasFlipped && (
+                <p className="mt-4 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-lg px-3 py-2">
+                  Hãy lật thẻ để xem nghĩa trước khi tự đánh giá.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-3 w-full max-w-md mt-6">
                 <button
                   type="button"
+                  disabled={!hasFlipped}
+                  title={hasFlipped ? 'Đánh dấu từ cần ôn lại' : 'Lật thẻ trước'}
                   onClick={() => handleFlashcardReview(false)}
-                  className="py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors flex items-center justify-center gap-2"
+                  className="py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors flex items-center justify-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />
                   <span>Cần Ôn Lại</span>
                 </button>
                 <button
                   type="button"
+                  disabled={!hasFlipped}
+                  title={hasFlipped ? 'Đánh dấu đã nhớ' : 'Lật thẻ trước'}
                   onClick={() => handleFlashcardReview(true)}
-                  className="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
+                  className="py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-xs transition-colors flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
                   <span>Đã Nhớ (+15 XP)</span>
                 </button>
               </div>
+              <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 text-center max-w-md">
+                Đây là tự đánh giá của bạn; hệ thống không kiểm tra phát âm hay trí nhớ.
+              </p>
             </div>
           )}
 
@@ -714,7 +918,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
               {/* Construction Zone */}
               <div className="min-h-24 sm:min-h-28 p-4 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-850/60 mb-5 flex flex-wrap items-center gap-2 content-start">
                 {selectedWords.length === 0 ? (
-                  <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 italic">
                     Chạm các từ bên dưới theo đúng thứ tự ngữ pháp...
                   </span>
                 ) : (
@@ -722,8 +926,9 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                     <button
                       key={`${word}-${idx}`}
                       type="button"
+                      disabled={reorderRevealed}
                       onClick={() => handleDeselectWord(idx)}
-                      className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 font-medium text-sm shadow-xs hover:bg-red-50 hover:border-red-200 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:border-red-800 dark:hover:text-red-300 transition-colors animate-in fade-in zoom-in-95 duration-150"
+                      className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 font-medium text-sm shadow-xs hover:bg-red-50 hover:border-red-200 hover:text-red-700 dark:hover:bg-red-950/50 dark:hover:border-red-800 dark:hover:text-red-300 transition-colors animate-in fade-in zoom-in-95 duration-150 disabled:cursor-not-allowed"
                     >
                       {word}
                     </button>
@@ -737,8 +942,9 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                   <button
                     key={item.id}
                     type="button"
+                    disabled={reorderRevealed}
                     onClick={() => handleSelectWord(item)}
-                    className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-800 dark:text-slate-200 font-medium text-sm border border-slate-200/80 dark:border-slate-700 transition-colors shadow-2xs active:scale-95"
+                    className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 disabled:opacity-50 disabled:cursor-not-allowed text-slate-800 dark:text-slate-200 font-medium text-sm border border-slate-200/80 dark:border-slate-700 transition-colors shadow-2xs active:scale-95"
                   >
                     {item.word}
                   </button>
@@ -749,7 +955,7 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
               {reorderStatus === 'correct' && (
                 <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-xl p-4 mb-4 animate-in fade-in">
                   <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm mb-1">
-                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                     <span>Chính xác tuyệt vời! (+15 XP)</span>
                   </div>
                   {currentExercise.grammarTip && (
@@ -764,11 +970,17 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                 <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl p-4 mb-4 animate-in fade-in">
                   <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300 font-bold text-sm mb-1">
                     <X className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                    <span>Chưa chính xác, hãy thử lại!</span>
+                    <span>{reorderRevealed ? 'Đã hết 2 lượt thử' : 'Chưa chính xác, hãy thử lại!'}</span>
                   </div>
-                  <p className="text-xs text-rose-700 dark:text-rose-300">
-                    Gợi ý: Hãy chú ý cấu trúc Chủ ngữ + Trạng từ + Động từ + Tân ngữ.
-                  </p>
+                  {reorderRevealed ? (
+                    <p className="text-xs text-rose-800 dark:text-rose-200">
+                      Đáp án đúng: <strong>{currentExercise.targetSentence}</strong>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-rose-700 dark:text-rose-300">
+                      Gợi ý: Hãy chú ý cấu trúc Chủ ngữ + Trạng từ + Động từ + Tân ngữ.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -787,14 +999,25 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                         }))
                       );
                       setReorderStatus('idle');
+                      setReorderRevealed(false);
                     }
                   }}
-                  className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1"
+                  disabled={reorderRevealed}
+                  className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed font-medium flex items-center gap-1"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Làm lại từ đầu
                 </button>
 
-                {reorderStatus !== 'correct' ? (
+                {reorderStatus === 'correct' || reorderRevealed ? (
+                  <button
+                    type="button"
+                    onClick={advanceExercise}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
+                  >
+                    <span>Tiếp Tục</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
                   <button
                     type="button"
                     disabled={selectedWords.length === 0}
@@ -802,15 +1025,6 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                     className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs shadow-xs transition-colors"
                   >
                     Kiểm Tra
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={advanceExercise}
-                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
-                  >
-                    <span>Tiếp Tục</span>
-                    <ArrowRight className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -871,11 +1085,21 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
               {/* Sentence with blank */}
               <div className="text-center p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl mb-6">
                 <p className="text-base sm:text-lg font-medium text-slate-800 dark:text-slate-200 leading-relaxed">
-                  {currentExercise.fullSentenceEn?.split(currentExercise.blankWord || '')[0]}
-                  <span className="inline-block px-3 py-0.5 mx-1 border-b-2 border-indigo-600 dark:border-indigo-400 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/80 rounded">
-                    {selectedOption || '_______'}
-                  </span>
-                  {currentExercise.fullSentenceEn?.split(currentExercise.blankWord || '')[1]}
+                  {(() => {
+                    const sentence = currentExercise.fullSentenceEn || '';
+                    const blank = currentExercise.blankWord || '';
+                    if (!blank) return sentence;
+                    const [before, ...rest] = sentence.split(blank);
+                    return (
+                      <>
+                        {before}
+                        <span className="inline-block px-3 py-0.5 mx-1 border-b-2 border-indigo-600 dark:border-indigo-400 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/80 rounded">
+                          {selectedOption || '_______'}
+                        </span>
+                        {rest.join(blank)}
+                      </>
+                    );
+                  })()}
                 </p>
               </div>
 
@@ -949,10 +1173,13 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
             <div className="flex flex-col flex-1">
               <div className="mb-4">
                 <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mb-1">
-                  Luyện Phát Âm Trực Tiếp
+                  Luyện Nói Theo Câu Mẫu
                 </span>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {currentExercise.vietnamesePrompt}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Điểm số là mức khớp giữa văn bản nhận diện được và câu mẫu, không phải điểm phát âm.
                 </p>
               </div>
 
@@ -1001,25 +1228,44 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                 <button
                   type="button"
                   onClick={handleToggleRecord}
-                  className={`w-18 h-18 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+                  disabled={speakingScore !== null}
+                  aria-label={isRecording ? 'Dừng ghi âm' : 'Bắt đầu nói'}
+                  className={`w-18 h-18 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
                     isRecording
                       ? 'bg-rose-500 text-white animate-pulse ring-4 ring-rose-200 dark:ring-rose-800'
                       : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
-                  title={isRecording ? 'Dừng ghi âm' : 'Bắt đầu nói'}
+                  title={
+                    speakingScore !== null
+                      ? 'Câu này đã được chấm'
+                      : isRecording
+                        ? 'Dừng ghi âm'
+                        : 'Bắt đầu nói'
+                  }
                 >
                   {isRecording ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
                 </button>
 
                 <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  {isRecording ? 'Đang lắng nghe giọng bạn...' : 'Bấm mic và đọc to câu trên'}
+                  {speakingScore !== null
+                    ? 'Đã chấm xong câu này'
+                    : isRecording
+                      ? 'Đang lắng nghe giọng bạn...'
+                      : 'Bấm mic và đọc to câu trên'}
                 </span>
               </div>
+
+              {speakingError && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200 mb-4">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{speakingError}</span>
+                </div>
+              )}
 
               {/* Speech Result / Fallback */}
               {spokenTranscript && (
                 <div className="bg-slate-100/80 dark:bg-slate-800/80 rounded-xl p-3 border border-slate-200 dark:border-slate-700 text-center mb-4">
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500 block mb-0.5">Giọng nói nhận diện được:</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mb-0.5">Giọng nói nhận diện được:</span>
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200 italic">
                     &ldquo;{spokenTranscript}&rdquo;
                   </p>
@@ -1029,13 +1275,29 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
               {speakingScore !== null && (
                 <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-xl p-4 mb-4 text-center">
                   <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300 mb-1">
-                    {speakingScore}% Chuẩn Xác
+                    {speakingScore}% khớp câu mẫu
                   </div>
                   <p className="text-xs text-emerald-800 dark:text-emerald-300">
                     {speakingScore >= 80
-                      ? 'Xuất sắc! Phát âm rất tự nhiên và rõ ràng.'
-                      : 'Khá tốt! Hãy chú ý ngữ điệu và trọng âm câu.'}
+                      ? 'Rất khớp! Hệ thống nhận diện được gần như toàn bộ câu mẫu.'
+                      : 'Chưa khớp hoàn toàn. Hãy nghe lại câu mẫu và đọc rõ từng từ.'}
                   </p>
+                  {speakingMatches.length > 0 && currentExercise.speakingTarget && (
+                    <div className="mt-3 flex flex-wrap justify-center gap-1">
+                      {currentExercise.speakingTarget.split(/\s+/).map((word, idx) => (
+                        <span
+                          key={`${word}-${idx}`}
+                          className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            speakingMatches[idx]
+                              ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200'
+                              : 'bg-slate-200/70 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400 line-through'
+                          }`}
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1054,14 +1316,14 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                   onClick={handleSelfVerifySpeaking}
                   className="text-xs text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium"
                 >
-                  Tôi đã tự đọc to (+15 XP)
+                  Tôi đã tự đọc to (không chấm điểm)
                 </button>
 
                 {speakingScore !== null ? (
                   <button
                     type="button"
                     onClick={advanceExercise}
-                    className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
+                    className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
                   >
                     <span>Tiếp Tục</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1113,26 +1375,34 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                   }
 
                   return (
-                    <div
+                    <button
                       key={opt.id}
+                      type="button"
+                      disabled={quizSubmitted}
+                      aria-pressed={isSelected}
                       onClick={() => handleSelectQuizOption(opt.id)}
-                      className={`p-4 rounded-xl border text-sm font-medium transition-all cursor-pointer ${cardStyle}`}
+                      className={`p-4 rounded-xl border text-left text-sm font-medium transition-all disabled:cursor-default ${cardStyle}`}
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold">{opt.text}</span>
                         {quizSubmitted && opt.isCorrect && (
-                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded">
+                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded shrink-0">
                             Chính xác
+                          </span>
+                        )}
+                        {quizSubmitted && isSelected && !opt.isCorrect && (
+                          <span className="text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 px-2 py-0.5 rounded shrink-0">
+                            Bạn chọn
                           </span>
                         )}
                       </div>
 
-                      {quizSubmitted && isSelected && (
+                      {quizSubmitted && (isSelected || opt.isCorrect) && (
                         <p className="text-xs mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700 text-slate-600 dark:text-slate-300 leading-relaxed">
                           💡 {opt.explanation}
                         </p>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -1167,12 +1437,14 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
 
               <div className="flex flex-col gap-3 mb-6 overflow-y-auto max-h-80 p-2">
                 {currentExercise.dialogueLines?.map((line, idx) => (
-                  <div
+                  <button
                     key={idx}
+                    type="button"
                     onClick={() => handlePlayAudio(line.en)}
-                    className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/50 dark:hover:bg-slate-750 border border-slate-200/80 dark:border-slate-700 cursor-pointer transition-colors"
+                    className="w-full text-left flex items-start gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50/50 dark:hover:bg-slate-750 border border-slate-200/80 dark:border-slate-700 cursor-pointer transition-colors"
+                    title="Nghe câu này"
                   >
-                    <span className="text-2xl select-none">{line.avatar}</span>
+                    <span className="text-2xl select-none" aria-hidden="true">{line.avatar}</span>
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-xs font-bold text-slate-900 dark:text-white">{line.speaker}</span>
@@ -1185,11 +1457,11 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                         {line.vi}
                       </p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
 
-              <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="mt-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
@@ -1202,22 +1474,23 @@ export const ExerciseRunner: React.FC<ExerciseRunnerProps> = ({
                   <span>Nghe Toàn Bộ Hội Thoại</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    playPopSound();
-                    setSessionScore((prev) => ({
-                      correct: prev.correct + 1,
-                      total: prev.total + 1,
-                      xp: prev.xp + 20,
-                    }));
-                    advanceExercise();
-                  }}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
-                >
-                  <span>Hoàn Tất (+20 XP)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playClickSound();
+                      markCompleted();
+                      advanceExercise();
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs transition-colors flex items-center gap-2"
+                  >
+                    <span>Hoàn Tất Hội Thoại</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Hội thoại không tính điểm hay XP
+                  </span>
+                </div>
               </div>
             </div>
           )}

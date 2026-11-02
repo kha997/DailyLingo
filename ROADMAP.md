@@ -1,3 +1,9 @@
+> **Historical document — superseded.** This file describes an earlier phase of
+> the project and is kept for context only. Current, evidence-backed Beta status
+> lives in [`docs/BETA_ACCEPTANCE.md`](docs/BETA_ACCEPTANCE.md). The app ships
+> **no AI-generated content, no Gemini client, no server, and no API key**; any
+> AI section below is an abandoned plan, not a shipped capability.
+
 # DailyLingo Implementation Roadmap - Phase 2: AI Integration & Reliability
 
 ## Overview
