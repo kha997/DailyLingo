@@ -33,16 +33,20 @@ export const QuickPractice: React.FC<QuickPracticeProps> = ({
   };
 
   const handleStartShuffledMode = (title: string, rawExercises: ExerciseItem[]) => {
-    // Shuffle so it is never identical
-    const shuffled = [...rawExercises].sort(() => 0.5 - Math.random());
+    // Fisher-Yates: unbiased order without pretending to be new content.
+    const shuffled = [...rawExercises];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     onStartCustomPractice(title, shuffled);
   };
 
   const practiceModes = [
     {
       id: 'speaking',
-      title: 'Luyện Nói & Chấm Điểm Phát Âm',
-      desc: 'Đọc to các mẫu câu giao tiếp, sử dụng micro để nhận diện giọng nói và chấm điểm độ chuẩn xác, kèm chế độ nghe chậm 0.7x.',
+      title: 'Luyện Nói & So Khớp Lời Nói',
+      desc: 'Đọc to mẫu câu, dùng micro để nhận diện giọng nói rồi so khớp với câu mẫu. Điểm này phản ánh các từ nhận dạng được, không phải chấm phát âm theo âm vị.',
       icon: Mic,
       color: 'bg-rose-500',
       badge: 'Web Speech API',
@@ -60,9 +64,9 @@ export const QuickPractice: React.FC<QuickPracticeProps> = ({
     {
       id: 'listening-cloze',
       title: 'Luyện Nghe & Điền Từ (Listening)',
-      desc: 'Luyện tai bắt âm thanh tốc độ chuẩn và 0.7x chậm, tìm từ khóa then chốt trong câu đàm thoại.',
+      desc: 'Nghe câu ở tốc độ chuẩn hoặc 0.7x chậm rồi chọn từ còn thiếu trong câu.',
       icon: Headphones,
-      color: 'bg-emerald-600',
+      color: 'bg-emerald-700',
       badge: 'Âm thanh tự nhiên & 0.7x',
       type: 'listening-cloze' as ExerciseType,
     },
@@ -87,7 +91,7 @@ export const QuickPractice: React.FC<QuickPracticeProps> = ({
     {
       id: 'dialogue',
       title: 'Hội Thoại Đóng Vai Giao Tiếp',
-      desc: 'Luyện nghe và nói từng lời thoại qua các cuộc đối thoại 2 người sống động.',
+      desc: 'Đọc và nghe các đoạn hội thoại mẫu. Phần hội thoại được ghi nhận là đã hoàn thành nhưng không tính điểm hay XP.',
       icon: MessageSquare,
       color: 'bg-purple-600',
       badge: 'Đàm thoại thực tế',
@@ -104,7 +108,7 @@ export const QuickPractice: React.FC<QuickPracticeProps> = ({
             Chế Độ Luyện Tập Chuyên Sâu
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Luyện tập tập trung theo kỹ năng với kho bài tập liên tục được xáo trộn ngẫu nhiên.
+            Luyện tập tập trung theo kỹ năng với các bài đã biên soạn trong 12 bài học.
           </p>
         </div>
 
@@ -137,7 +141,7 @@ export const QuickPractice: React.FC<QuickPracticeProps> = ({
                     <Icon className="w-6 h-6" />
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium font-mono tabular-nums">
-                    {exercises.length} bài tập phong phú
+                    {exercises.length} bài tập
                   </span>
                 </div>
 

@@ -17,9 +17,7 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     availableVoices = window.speechSynthesis.getVoices();
   };
   loadVoices();
-  if (window.speechSynthesis.onvoiceschanged !== undefined) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }
+  window.speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
 }
 
 export function speakEnglish(
@@ -98,53 +96,150 @@ export function speakEnglish(
   });
 }
 
-// Pronunciation similarity comparison
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+}
+
+/**
+ * Transcript alignment score for read-aloud practice.
+ *
+ * This is intentionally a word-order-sensitive comparison, not a pronunciation
+ * score. The Web Speech API returns text only; it cannot measure phonemes.
+ * The score is 1 - word edit distance / longer sentence length, so missing,
+ * inserted, substituted, or reordered words all reduce the result.
+ */
 export function calculateSimilarity(spoken: string, target: string) {
-  const cleanSpoken = spoken.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g, '').trim();
-  const cleanTarget = target.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()?'"]/g, '').trim();
+  const spokenTokens = tokenize(spoken);
+  const targetTokens = tokenize(target);
 
-  const spokenTokens = cleanSpoken.split(/\s+/).filter(Boolean);
-  const targetTokens = cleanTarget.split(/\s+/).filter(Boolean);
+  if (targetTokens.length === 0) {
+    return { score: 100, matches: [] as boolean[], targetTokens, spokenTokens };
+  }
+  if (spokenTokens.length === 0) {
+    return { score: 0, matches: targetTokens.map(() => false), targetTokens, spokenTokens };
+  }
 
-  if (targetTokens.length === 0) return { score: 100, matches: [] };
+  // Levenshtein distance over word tokens.
+  const rows = targetTokens.length + 1;
+  const cols = spokenTokens.length + 1;
+  const distance = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+  for (let i = 0; i < rows; i++) distance[i][0] = i;
+  for (let j = 0; j < cols; j++) distance[0][j] = j;
 
-  const matches = targetTokens.map((targetWord) => {
-    // Check if spoken contains targetWord or close to it
-    return spokenTokens.some((spokenWord) => {
-      if (spokenWord === targetWord) return true;
-      // Simple 1-char tolerance
-      if (Math.abs(spokenWord.length - targetWord.length) <= 1) {
-        let diff = 0;
-        const minLen = Math.min(spokenWord.length, targetWord.length);
-        for (let i = 0; i < minLen; i++) {
-          if (spokenWord[i] !== targetWord[i]) diff++;
-        }
-        return diff <= 1;
-      }
-      return false;
-    });
-  });
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      const substitutionCost = targetTokens[i - 1] === spokenTokens[j - 1] ? 0 : 1;
+      distance[i][j] = Math.min(
+        distance[i - 1][j] + 1,
+        distance[i][j - 1] + 1,
+        distance[i - 1][j - 1] + substitutionCost
+      );
+    }
+  }
 
-  const matchedCount = matches.filter(Boolean).length;
-  const score = Math.round((matchedCount / targetTokens.length) * 100);
+  const maxLength = Math.max(targetTokens.length, spokenTokens.length);
+  const score = Math.max(0, Math.min(100, Math.round((1 - distance[rows - 1][cols - 1] / maxLength) * 100)));
 
-  return {
-    score,
-    matches,
-    targetTokens,
-    spokenTokens,
-  };
+  // Longest common subsequence marks which target words appeared in order.
+  const lcs = Array.from({ length: rows }, () => new Array<number>(cols).fill(0));
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      lcs[i][j] =
+        targetTokens[i - 1] === spokenTokens[j - 1]
+          ? lcs[i - 1][j - 1] + 1
+          : Math.max(lcs[i - 1][j], lcs[i][j - 1]);
+    }
+  }
+  const matches = targetTokens.map(() => false);
+  let i = targetTokens.length;
+  let j = spokenTokens.length;
+  while (i > 0 && j > 0) {
+    if (targetTokens[i - 1] === spokenTokens[j - 1]) {
+      matches[i - 1] = true;
+      i--;
+      j--;
+    } else if (lcs[i - 1][j] >= lcs[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+
+  return { score, matches, targetTokens, spokenTokens };
 }
 
 // Speech Recognition helper
 export interface SpeechRecognitionResult {
+  /** Final text plus any still-interim tail, for display. */
   transcript: string;
+  /** Final text only. Only this is safe to score. */
+  finalTranscript: string;
   isFinal: boolean;
+}
+
+interface RecognitionAlternative {
+  transcript: string;
+}
+
+interface RecognitionResultLike {
+  isFinal: boolean;
+  0?: RecognitionAlternative;
+}
+
+/**
+ * Build one transcript update from a Web Speech `event.results` list.
+ *
+ * The API grows the list while the user speaks, so both final and interim
+ * segments are joined rather than replaced. Returning the interim tail keeps
+ * the on-screen text complete; callers score `finalTranscript` only so a
+ * half-finished word can never inflate or deflate a score.
+ */
+export function buildTranscriptUpdate(
+  results: ArrayLike<RecognitionResultLike>
+): SpeechRecognitionResult {
+  const finalParts: string[] = [];
+  const interimParts: string[] = [];
+
+  for (let i = 0; i < results.length; i += 1) {
+    const result = results[i];
+    const text = result?.[0]?.transcript ?? '';
+    if (!text) continue;
+    if (result.isFinal) finalParts.push(text);
+    else interimParts.push(text);
+  }
+
+  const finalTranscript = finalParts.join(' ').replace(/\s+/g, ' ').trim();
+  const interimTranscript = interimParts.join(' ').replace(/\s+/g, ' ').trim();
+  const transcript = [finalTranscript, interimTranscript]
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    transcript,
+    finalTranscript,
+    isFinal: finalTranscript.length > 0,
+  };
 }
 
 export interface SpeechRecognizerInitState {
   isSupported: boolean;
   permissionDenied: boolean;
+}
+
+/** Whether this browser exposes the Web Speech recognition API at all. */
+export function isSpeechRecognitionSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  );
 }
 
 export class SpeechRecognizer {
@@ -154,7 +249,7 @@ export class SpeechRecognizer {
   public permissionDenied: boolean = false;
   private isListening: boolean = false;
 
-  constructor() {
+  constructor(accent: 'en-US' | 'en-GB' = 'en-US') {
     if (typeof window !== 'undefined') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-internal
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -163,11 +258,13 @@ export class SpeechRecognizer {
         this.recognition = new SpeechRecognition();
         this.recognition.continuous = false;
         this.recognition.interimResults = true;
-        this.recognition.lang = 'en-US';
-        // Set up permission state on init
-        this.permissionDenied = false;
+        this.recognition.lang = accent;
       }
     }
+  }
+
+  setAccent(accent: 'en-US' | 'en-GB') {
+    if (this.recognition) this.recognition.lang = accent;
   }
 
   startListening(
@@ -176,7 +273,9 @@ export class SpeechRecognizer {
     onEnd: () => void
   ) {
     if (!this.recognition) {
-      onError('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói Web Speech API. Vui lòng sử dụng Chrome hoặc Edge để sử dụng tính năng luyện nói.');
+      onError(
+        'Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Web Speech API). Hãy dùng Chrome hoặc Edge, hoặc dùng nút "Tôi đã đọc to" để tiếp tục.'
+      );
       return;
     }
 
@@ -188,48 +287,93 @@ export class SpeechRecognizer {
       }
     }
 
+    let finished = false;
+    const finishOnce = (callback: () => void) => {
+      if (finished) return;
+      finished = true;
+      callback();
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-internal
     this.recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
-      }
-      onResult({
-        transcript: finalTranscript || interimTranscript,
-        isFinal: !!finalTranscript,
-      });
+      onResult(buildTranscriptUpdate(event.results));
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-internal
     this.recognition.onerror = (event: any) => {
       this.isListening = false;
-      const errorCode = event.error || 'unknown';
-      if (errorCode === 'not-allowed' || errorCode === 'no-speech') {
-        onError('Không có quyền truy cập Microphone. Vui lòng bấm vào biểu tượng cài đặt/ổ khóa trang web và cấp phép Microphone cho DailyLingo.');
-      } else if (errorCode === 'aborted') {
-        // Normal when user stops manually
-        onError('');
-      } else {
-        onError(`Lỗi nhận diện âm thanh: ${event.error}. Vui lòng thử lại.`);
+      const errorCode = event?.error || 'unknown';
+
+      // User-initiated stop/abort is not an error worth showing.
+      if (errorCode === 'aborted') {
+        finishOnce(() => onError(''));
+        return;
       }
+
+      if (errorCode === 'not-allowed' || errorCode === 'service-not-allowed') {
+        this.permissionDenied = true;
+        finishOnce(() =>
+          onError(
+            'Quyền truy cập micro đang bị chặn. Bấm biểu tượng ổ khóa/cài đặt trên thanh địa chỉ, cấp quyền Microphone cho trang này, rồi thử lại.'
+          )
+        );
+        return;
+      }
+
+      if (errorCode === 'no-speech') {
+        finishOnce(() =>
+          onError(
+            'Không nghe thấy giọng nói. Hãy bấm micro, đợi biểu tượng chuyển sang trạng thái ghi âm rồi đọc to câu mẫu trong vài giây.'
+          )
+        );
+        return;
+      }
+
+      if (errorCode === 'audio-capture') {
+        finishOnce(() =>
+          onError(
+            'Không tìm thấy micro đang hoạt động. Kiểm tra micro đã kết nối và được chọn trong cài đặt âm thanh của máy.'
+          )
+        );
+        return;
+      }
+
+      if (errorCode === 'network') {
+        finishOnce(() =>
+          onError(
+            'Dịch vụ nhận diện giọng nói không kết nối được. Kiểm tra mạng rồi thử lại, hoặc dùng nút "Tôi đã đọc to" để tiếp tục.'
+          )
+        );
+        return;
+      }
+
+      finishOnce(() =>
+        onError(
+          `Không nhận diện được giọng nói (mã: ${errorCode}). Hãy thử lại hoặc dùng nút "Tôi đã đọc to".`
+        )
+      );
+    };
+
+    this.recognition.onstart = () => {
+      this.isListening = true;
+      this.permissionDenied = false;
     };
 
     this.recognition.onend = () => {
       this.isListening = false;
-      onEnd();
+      finishOnce(onEnd);
     };
 
     try {
       this.isListening = true;
       this.recognition.start();
-    } catch (err) {
+    } catch {
       this.isListening = false;
-      onError('Không thể bắt đầu ghi âm. Vui lòng thử lại hoặc làm mới trang.');
+      finishOnce(() =>
+        onError(
+          'Không thể bắt đầu ghi âm. Hãy đợi một chút rồi thử lại, hoặc tải lại trang nếu lỗi tiếp diễn.'
+        )
+      );
     }
   }
 
@@ -242,5 +386,16 @@ export class SpeechRecognizer {
       }
       this.isListening = false;
     }
+  }
+
+  /** Abort without producing a user-facing error (used when closing a session). */
+  abort() {
+    if (!this.recognition) return;
+    try {
+      this.recognition.abort();
+    } catch {
+      // Ignore
+    }
+    this.isListening = false;
   }
 }

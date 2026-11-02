@@ -1,3 +1,9 @@
+> **Historical document — superseded.** This file describes an earlier phase of
+> the project and is kept for context only. Current, evidence-backed Beta status
+> lives in [`docs/BETA_ACCEPTANCE.md`](docs/BETA_ACCEPTANCE.md). The app ships
+> **no AI-generated content, no Gemini client, no server, and no API key**; any
+> AI section below is an abandoned plan, not a shipped capability.
+
 # DailyLingo Codebase Analysis & Roadmap - Progress Update
 
 ## Repository Overview
@@ -8,7 +14,7 @@
 - **Text-to-Speech**: Web Speech API
 - **Speech Recognition**: Web Speech API (improved)
 - **Audio**: Web Audio API synthesized effects
-- **AI**: @google/genai dependency present but unused (tracked for future)
+- **AI**: none. The `@google/genai` dependency was removed; there is no AI client at runtime
 
 ## Changes Made (Phase 1: Foundation & Bug Fixes)
 

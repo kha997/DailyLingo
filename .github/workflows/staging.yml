@@ -1,0 +1,85 @@
+name: Staging preview (manual, owner-gated)
+
+# Nothing in this workflow runs on push or schedule. A maintainer must start it
+# manually, type STAGING, and (for a hosted preview) opt in to publish, which
+# still requires the `staging` environment's protection rules to approve.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type STAGING to confirm this manual staging build
+        required: true
+        type: string
+      publish:
+        description: Publish the built bundle to the protected staging Pages environment
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: staging-preview
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require explicit confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "STAGING" ]; then
+            echo "::error::Type STAGING in the confirm input to run this workflow."
+            exit 1
+          fi
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: guard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the exact commit the maintainer selected, not a moving branch.
+          ref: ${{ github.sha }}
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - name: Build for the repository sub-path
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /DailyLingo/
+      - run: npm run check:bundle
+      - name: Upload downloadable preview (no deployment)
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-preview-dist
+          path: dist/
+          retention-days: 14
+      - name: Package Pages artifact
+        if: inputs.publish
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    if: inputs.publish
+    environment:
+      name: staging
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to the protected staging environment
+        id: deployment
+        uses: actions/deploy-pages@v4

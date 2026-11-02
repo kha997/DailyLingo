@@ -3,21 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { TopNav } from './components/TopNav.tsx';
 import { DailyHeroSection } from './components/DailyHeroSection.tsx';
 import { LessonCatalog } from './components/LessonCatalog.tsx';
 import { QuickPractice } from './components/QuickPractice.tsx';
 import { VocabularyNotebook } from './components/VocabularyNotebook.tsx';
-import { ProgressAnalytics } from './components/ProgressAnalytics.tsx';
 import { ExerciseRunner } from './components/ExerciseRunner.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { StreakDetailsModal } from './components/StreakDetailsModal.tsx';
 import { CustomPracticeModal } from './components/CustomPracticeModal.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
-import { ExerciseItem, LessonUnit, SavedWord, UserStats, Badge } from './types/index.ts';
+import { ExerciseItem, LessonUnit, SavedWord, UserStats, Badge, SessionResult } from './types/index.ts';
 import { computeNextReviewDate } from './data/curriculumData.ts';
-import { LESSON_UNITS, getDailyChallengeExercises } from './data/curriculumData.ts';
+import {
+  DEFAULT_BADGES,
+  LESSON_UNITS,
+  getDailyChallengeExercises,
+} from './data/curriculumData.ts';
 import {
   loadUserStats,
   saveUserStats,
@@ -27,16 +31,47 @@ import {
   saveBadges,
   getTodayDateString,
   getYesterdayDateString,
+  consumeStorageRecoveryNotice,
+  clearAllUserData,
+  getStorageUsageBytes,
   INITIAL_USER_STATS,
 } from './utils/storage.ts';
+import {
+  applySessionResult,
+  applyWordMasteryToggle,
+  applyWordReview,
+  updateBadgeProgress,
+} from './utils/progress.ts';
 import { applyTheme, AppTheme, getSystemTheme } from './utils/theme.ts';
 import { checkAndTriggerDailyReminder } from './utils/notifications.ts';
+
+// `recharts` is only needed on the analytics tab. Keeping it in a lazy chunk
+// removes roughly two thirds of the initial JavaScript payload.
+const ProgressAnalytics = lazy(() =>
+  import('./components/ProgressAnalytics.tsx').then((module) => ({
+    default: module.ProgressAnalytics,
+  }))
+);
+
+const AnalyticsSkeleton = () => (
+  <div
+    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400"
+    role="status"
+    aria-live="polite"
+  >
+    Đang tải phần thống kê…
+  </div>
+);
+
+const cloneBadges = (): Badge[] => DEFAULT_BADGES.map((badge) => ({ ...badge }));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'lessons' | 'practice' | 'notebook' | 'analytics'>('lessons');
   const [userStats, setUserStats] = useState<UserStats>(loadUserStats);
   const [savedWords, setSavedWords] = useState<SavedWord[]>(loadSavedWords);
   const [badges, setBadges] = useState<Badge[]>(loadBadges);
+  const [storageNotice, setStorageNotice] = useState<string | null>(null);
+  const [storageWriteFailed, setStorageWriteFailed] = useState(false);
 
   // Active Exercise Session State
   const [activeSession, setActiveSession] = useState<{
@@ -48,6 +83,33 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showCustomPracticeModal, setShowCustomPracticeModal] = useState(false);
+
+  // Surface corrupt/blocked storage once, without uploading anything.
+  useEffect(() => {
+    const events = consumeStorageRecoveryNotice();
+    if (events.length === 0) return;
+
+    const corrupt = events.filter((event) => event.kind === 'corrupt');
+    const blocked = events.filter((event) => event.kind === 'blocked');
+    const quota = events.filter((event) => event.kind === 'quota');
+
+    if (corrupt.length > 0) {
+      const backups = corrupt
+        .map((event) => event.backupKey)
+        .filter((key): key is string => Boolean(key));
+      setStorageNotice(
+        backups.length > 0
+          ? `Dữ liệu lưu trên trình duyệt bị hỏng. Bản gốc đã được sao lưu (${backups.join(', ')}) trước khi dùng dữ liệu mặc định.`
+          : 'Dữ liệu lưu trên trình duyệt bị hỏng và không thể sao lưu. Ứng dụng đang dùng dữ liệu mặc định.'
+      );
+    } else if (blocked.length > 0) {
+      setStorageNotice(
+        'Trình duyệt đang chặn bộ nhớ cục bộ. Tiến độ sẽ không được lưu cho đến khi bạn cho phép lưu trữ trang này.'
+      );
+    } else if (quota.length > 0) {
+      setStorageNotice('Bộ nhớ trình duyệt đã đầy. Hãy xuất dữ liệu và xóa bớt dữ liệu trang.');
+    }
+  }, []);
 
   // Synchronize theme with DOM
   useEffect(() => {
@@ -76,12 +138,10 @@ export default function App() {
   useEffect(() => {
     if (!userStats.reminderEnabled) return;
 
-    // Check immediately on mount or config change
     checkAndTriggerDailyReminder(userStats, (sentDate) => {
       setUserStats((prev) => ({ ...prev, lastReminderSentDate: sentDate }));
     });
 
-    // Check every 30 seconds
     const interval = setInterval(() => {
       checkAndTriggerDailyReminder(userStats, (sentDate) => {
         setUserStats((prev) => ({ ...prev, lastReminderSentDate: sentDate }));
@@ -98,130 +158,69 @@ export default function App() {
     userStats.dailyGoal,
   ]);
 
-  // Sync to storage on state change
+  // Calendar rollover: `todayExercisesDone` is reset when stats load, so a tab
+  // left open past midnight would otherwise keep showing yesterday's count.
   useEffect(() => {
-    saveUserStats(userStats);
-  }, [userStats]);
+    const interval = setInterval(() => {
+      const today = getTodayDateString();
+      setUserStats((prev) => {
+        if (prev.lastStudyDate === today || prev.todayExercisesDone === 0) return prev;
+        return { ...prev, todayExercisesDone: 0 };
+      });
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Persist and surface write failures instead of silently losing progress.
+  // One writer keeps the banner truthful: a later successful write clears a
+  // previous failure instead of leaving a stale warning on screen forever.
   useEffect(() => {
-    saveSavedWords(savedWords);
-  }, [savedWords]);
-
-  useEffect(() => {
-    saveBadges(badges);
-  }, [badges]);
+    const statsSaved = saveUserStats(userStats);
+    const wordsSaved = saveSavedWords(savedWords);
+    const badgesSaved = saveBadges(badges);
+    setStorageWriteFailed(!(statsSaved && wordsSaved && badgesSaved));
+  }, [userStats, savedWords, badges]);
 
   // Handle Finishing an Exercise Session
-  const handleFinishExercise = (result: {
-    total: number;
-    correct: number;
-    earnedXp: number;
-    exerciseType: string;
-    reviewedWords?: string[];
-  }) => {
+  const handleFinishExercise = (result: SessionResult) => {
     setActiveSession(null);
+    if (result.completed <= 0) return;
 
     const today = getTodayDateString();
     const yesterday = getYesterdayDateString();
+    const projectedStats = applySessionResult(userStats, result, today, yesterday);
+    setUserStats(projectedStats);
 
-    setUserStats((prev) => {
-      const newXp = prev.xp + result.earnedXp;
-      const newLevel = Math.max(1, Math.floor(newXp / 100) + 1);
-
-      let newStreak = prev.currentStreak;
-      const hasStudiedToday = prev.studyDays.includes(today);
-
-      if (!hasStudiedToday) {
-        if (prev.lastStudyDate === yesterday) {
-          newStreak += 1;
-        } else if (prev.lastStudyDate !== today) {
-          newStreak = 1;
-        }
-      }
-
-      const updatedStudyDays = hasStudiedToday
-        ? prev.studyDays
-        : [...prev.studyDays, today];
-
-      const newTotalDone = prev.totalExercisesCompleted + result.total;
-      const newCorrect = prev.correctAnswersCount + result.correct;
-      const newTodayDone = prev.todayExercisesDone + result.total;
-
-      // Update skill mastery dynamically
-      const newMastery = { ...prev.skillMastery };
-      const boost = Math.min(2, Math.round(result.correct * 0.5));
-      if (result.exerciseType === 'flashcard') {
-        newMastery.vocabulary = Math.min(100, newMastery.vocabulary + boost);
-      } else if (result.exerciseType === 'word-reorder') {
-        newMastery.grammar = Math.min(100, newMastery.grammar + boost);
-      } else if (result.exerciseType === 'listening-cloze') {
-        newMastery.listening = Math.min(100, newMastery.listening + boost);
-      } else if (result.exerciseType === 'speaking') {
-        newMastery.speaking = Math.min(100, newMastery.speaking + boost);
-      }
-
-      const prevHistory = prev.dailyXpHistory || {};
-      const updatedDailyHistory = {
-        ...prevHistory,
-        [today]: (prevHistory[today] || 0) + result.earnedXp,
-      };
-
-      return {
-        ...prev,
-        xp: newXp,
-        level: newLevel,
-        currentStreak: newStreak,
-        longestStreak: Math.max(prev.longestStreak, newStreak),
-        lastStudyDate: today,
-        studyDays: updatedStudyDays,
-        todayExercisesDone: newTodayDone,
-        totalExercisesCompleted: newTotalDone,
-        correctAnswersCount: newCorrect,
-        timeSpentMinutes: prev.timeSpentMinutes + Math.max(2, Math.round(result.total * 0.8)),
-        skillMastery: newMastery,
-        dailyXpHistory: updatedDailyHistory,
-      };
-    });
-
-    // Reschedule saved words reviewed in this session (spaced repetition).
+    // Reschedule saved words the learner actually reviewed in this session.
+    // "Đã nhớ" lengthens the interval; "Cần ôn lại" shortens it and clears the
+    // mastered mark, so the schedule reflects reported recall rather than a
+    // fixed constant.
     const reviewedWords = result.reviewedWords ?? [];
-    if (reviewedWords.length > 0) {
-      const normalizedWords = new Set(reviewedWords.map((word) => word.toLowerCase()));
+    const struggledWords = result.struggledWords ?? [];
+    if (reviewedWords.length > 0 || struggledWords.length > 0) {
+      const recalled = new Set(reviewedWords.map((word) => word.toLowerCase()));
+      const struggled = new Set(struggledWords.map((word) => word.toLowerCase()));
       setSavedWords((prevWords) =>
         prevWords.map((word) => {
-          if (!normalizedWords.has(word.word.toLowerCase())) return word;
-          const nextReviewCount = word.reviewCount + 1;
-          return {
-            ...word,
-            reviewCount: nextReviewCount,
-            lastReviewedAt: today,
-            nextReviewDate: computeNextReviewDate(today, 50, nextReviewCount),
-          };
+          const key = word.word.toLowerCase();
+          // If a word shows up both ways, treat it as "needs review".
+          if (struggled.has(key)) return applyWordReview(word, today, 'needs-review');
+          if (recalled.has(key)) return applyWordReview(word, today, 'recalled');
+          return word;
         })
       );
     }
 
-    // Check Badge Progress
     setBadges((prevBadges) =>
-      prevBadges.map((badge) => {
-        if (badge.unlockedAt) return badge;
-
-        if (badge.id === 'streak-7' && userStats.currentStreak >= 7) {
-          return { ...badge, unlockedAt: today, currentCount: 7 };
-        }
-        if (badge.id === 'mastery-level-2' && userStats.xp + result.earnedXp >= 300) {
-          return {
-            ...badge,
-            unlockedAt: today,
-            currentCount: userStats.xp + result.earnedXp,
-          };
-        }
-        if (badge.id === 'perfect-score' && result.exerciseType === 'speaking' && result.correct >= 1) {
-          return { ...badge, unlockedAt: today, currentCount: 1 };
-        }
-
-        return badge;
-      })
+      updateBadgeProgress(
+        prevBadges,
+        {
+          stats: projectedStats,
+          savedWordsCount: savedWords.length,
+          speakingBestScore: result.speakingBestScore,
+        },
+        today
+      )
     );
   };
 
@@ -255,6 +254,10 @@ export default function App() {
 
   // Launch Quick Practice Mode
   const handleStartCustomPractice = (title: string, exercises: ExerciseItem[]) => {
+    if (exercises.length === 0) {
+      setStorageNotice('Không tìm thấy bài tập phù hợp với lựa chọn này. Hãy đổi chủ đề hoặc cấp độ.');
+      return;
+    }
     setActiveSession({
       title,
       exercises,
@@ -286,23 +289,9 @@ export default function App() {
 
   // Saved Words Handlers
   const handleToggleMastered = (id: string) => {
+    const today = getTodayDateString();
     setSavedWords((prev) =>
-      prev.map((w) =>
-        w.id === id
-          ? {
-              ...w,
-              mastered: !w.mastered,
-              reviewCount: w.reviewCount + 1,
-              lastReviewedAt: getTodayDateString(),
-              // Compute next review date based on review count with default mastery 50
-              nextReviewDate: computeNextReviewDate(
-                getTodayDateString(),
-                50, // default medium mastery
-                w.reviewCount + 1
-              ),
-            }
-          : w
-      )
+      prev.map((word) => (word.id === id ? applyWordMasteryToggle(word, today) : word))
     );
   };
 
@@ -315,22 +304,19 @@ export default function App() {
       mastered: false,
       reviewCount: 0,
       lastReviewedAt: getTodayDateString(),
-      nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0), // Day 1 review
+      nextReviewDate: computeNextReviewDate(getTodayDateString(), 0, 0),
     };
+    const nextCount = savedWords.length + 1;
     setSavedWords((prev) => [newWord, ...prev]);
-
-    // Check vocabulary collector badge
     setBadges((prev) =>
-      prev.map((b) => {
-        if (b.id === 'vocab-collector' && savedWords.length + 1 >= b.targetCount) {
-          return {
-            ...b,
-            currentCount: savedWords.length + 1,
-            unlockedAt: b.unlockedAt || getTodayDateString(),
-          };
-        }
-        return b;
-      })
+      updateBadgeProgress(
+        prev,
+        {
+          stats: userStats,
+          savedWordsCount: nextCount,
+        },
+        getTodayDateString()
+      )
     );
   };
 
@@ -351,16 +337,40 @@ export default function App() {
     }
   };
 
-  // Reset progress handler
-  const handleResetProgress = () => {
-    setUserStats(INITIAL_USER_STATS);
+  // Destructive: requires explicit confirmation in Settings and clears every
+  // DailyLingo key, including recovery snapshots. Returns false (and leaves the
+  // in-memory learner data alone) if the browser refuses to clear storage.
+  const handleResetAllData = (): boolean => {
+    setActiveSession(null);
+    if (!clearAllUserData()) {
+      setStorageWriteFailed(true);
+      setStorageNotice(
+        'Không thể xóa dữ liệu trong trình duyệt này. Dữ liệu hiện tại vẫn còn; hãy xuất bản sao lưu trước khi thử lại.'
+      );
+      return false;
+    }
+    setUserStats({ ...INITIAL_USER_STATS, skillMastery: { ...INITIAL_USER_STATS.skillMastery } });
+    setSavedWords([]);
+    setBadges(cloneBadges());
+    setStorageWriteFailed(false);
+    setStorageNotice(null);
+    applyTheme('light');
+    setShowSettings(false);
+    return true;
+  };
+
+  const handleImportData = (data: { stats: UserStats; words: SavedWord[]; badges: Badge[] }) => {
+    setUserStats(data.stats);
+    setSavedWords(data.words);
+    setBadges(data.badges.length > 0 ? data.badges : cloneBadges());
+    setStorageWriteFailed(false);
+    setStorageNotice('Đã khôi phục dữ liệu từ tệp sao lưu. Tiến độ sẽ được lưu cục bộ.');
   };
 
   const masteredWordsCount = savedWords.filter((w) => w.mastered).length;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col antialiased transition-colors duration-200">
-      {/* Top Bar following 3-Zone contract */}
       <TopNav
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -371,9 +381,32 @@ export default function App() {
         currentTheme={userStats.theme || 'light'}
       />
 
-      {/* Main Content Area */}
+      {(storageNotice || storageWriteFailed) && (
+        <div
+          className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4"
+          role="alert"
+        >
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 px-4 py-3 text-xs text-amber-900 dark:text-amber-200">
+            <p>
+              {storageWriteFailed
+                ? 'Không thể ghi tiến độ vào bộ nhớ trình duyệt. Hãy mở Cài đặt để xuất dữ liệu trước khi tiếp tục.'
+                : storageNotice}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setStorageNotice(null);
+                setStorageWriteFailed(false);
+              }}
+              className="font-semibold underline shrink-0"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Daily Motivation & Goal Hero (Shown on lessons & practice tabs) */}
         {(activeTab === 'lessons' || activeTab === 'practice') && (
           <DailyHeroSection
             userStats={userStats}
@@ -383,7 +416,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 1: Comprehensive CEFR Lessons */}
         {activeTab === 'lessons' && (
           <LessonCatalog
             units={LESSON_UNITS}
@@ -393,7 +425,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: Quick Skill Practice Drills */}
         {activeTab === 'practice' && (
           <QuickPractice
             onStartCustomPractice={handleStartCustomPractice}
@@ -401,7 +432,6 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Vocabulary Notebook */}
         {activeTab === 'notebook' && (
           <VocabularyNotebook
             savedWords={savedWords}
@@ -414,53 +444,64 @@ export default function App() {
           />
         )}
 
-        {/* Tab 4: Progress Analytics & Badges */}
         {activeTab === 'analytics' && (
-          <ProgressAnalytics
-            userStats={userStats}
-            badges={badges}
-            savedWordsCount={savedWords.length}
-            masteredWordsCount={masteredWordsCount}
-          />
+          <ErrorBoundary
+            fallbackTitle="Không tải được phần thống kê"
+            fallbackMessage="Dữ liệu học tập của bạn vẫn được giữ nguyên. Hãy tải lại trang hoặc thử lại sau."
+          >
+            <Suspense fallback={<AnalyticsSkeleton />}>
+              <ProgressAnalytics
+                userStats={userStats}
+                badges={badges}
+                savedWordsCount={savedWords.length}
+                masteredWordsCount={masteredWordsCount}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </main>
 
-      {/* Active Exercise Interactive Runner Modal */}
       {activeSession && (
-        <ExerciseRunner
-          title={activeSession.title}
-          exercises={activeSession.exercises}
-          onFinish={handleFinishExercise}
-          onClose={() => setActiveSession(null)}
-          savedWords={savedWords}
-          onToggleSaveWord={handleToggleSaveWord}
-          userStats={userStats}
-        />
+        <ErrorBoundary
+          fallbackTitle="Bài luyện tập gặp lỗi"
+          fallbackMessage="Tiến độ đã lưu vẫn an toàn. Hãy đóng bài luyện này và thử lại."
+        >
+          <ExerciseRunner
+            title={activeSession.title}
+            exercises={activeSession.exercises}
+            onFinish={handleFinishExercise}
+            onClose={() => setActiveSession(null)}
+            savedWords={savedWords}
+            onToggleSaveWord={handleToggleSaveWord}
+            userStats={userStats}
+          />
+        </ErrorBoundary>
       )}
 
-      {/* Custom Topic Generator Modal */}
       {showCustomPracticeModal && (
         <CustomPracticeModal
-          onStartSession={(title, exercises) =>
-            setActiveSession({ title, exercises })
-          }
+          onStartSession={(title, exercises) => {
+            setShowCustomPracticeModal(false);
+            handleStartCustomPractice(title, exercises);
+          }}
           onClose={() => setShowCustomPracticeModal(false)}
         />
       )}
 
-      {/* Settings Modal */}
       {showSettings && (
         <SettingsModal
           userStats={userStats}
+          savedWordsCount={savedWords.length}
+          storageUsageBytes={getStorageUsageBytes()}
           onUpdateStats={(updates) =>
             setUserStats((prev) => ({ ...prev, ...updates }))
           }
-          onResetProgress={handleResetProgress}
+          onImportData={handleImportData}
+          onResetAllData={handleResetAllData}
           onClose={() => setShowSettings(false)}
         />
       )}
 
-      {/* Streak Details Modal */}
       {showStreakModal && (
         <StreakDetailsModal
           userStats={userStats}
@@ -469,7 +510,6 @@ export default function App() {
         />
       )}
 
-      {/* Clean Unboxed Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/80 py-6 mt-12 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <span className="text-slate-600 dark:text-slate-400 font-medium">DailyLingo · Học tiếng Anh tương tác mỗi ngày</span>
