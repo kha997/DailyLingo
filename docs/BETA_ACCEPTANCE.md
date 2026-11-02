@@ -259,6 +259,51 @@ Post-review hardening (found by the final consistency pass, not by the reviewer)
   `tsc --noEmit`; it is named `typecheck`, not `lint`, so nothing claims a
   linter ran.
 
+## Owner Gate package — final deliverable (this session)
+
+One consolidated checklist for the Owner-gated real-world Beta gate. This section
+is the stable summary of the state reached at the end of the engineering phase.
+
+### Completed engineering work (verified — no further code action required)
+
+- Local gates green at final state: typecheck clean; **149 unit tests / 10 files**
+  pass; coverage thresholds pass; timezone matrix **54/54 ×3 zones** pass; build OK;
+  bundle budget OK; **`npm run verify` exit 0**.
+- Playwright **16/16** journeys on dev server and **16/16** via production preview;
+  WCAG AA contrast audit included; accessibility journeys green.
+- Independent internal review (two subagents): **no blockers**; findings remediated
+  or design-scoped; no known **P0/P1** remain.
+- Hosted CI on final proposed commit **`ee89b84976086183b69ee541517c4a38fa2da1b3`**
+  (PR #5 head): **run `41373777355` → conclusion `success`**; all four jobs
+  (`typecheck`, `test`, `build`, `e2e`) green. Earlier green runs: `41372184104`,
+  `41372504556`, `41372782186`, `41373100885`.
+- PR #5 open (`beta-readiness` → `main`) at final head **`ee89b84976086183b69ee541517c4a38fa2da1b3`**;
+  **not merged**.
+
+### Pending deployment tasks (Owner-gated; nothing published)
+
+- Finalize non-public Cloudflare Pages staging deployment plan (build command,
+  output directory, base path `/DailyLingo/`, env `VITE_BASE_PATH`, rollback path).
+- Verify build output / configuration / rollback and data-recovery procedures against
+  the final commit — **already verified locally** (sub-path build 200 OK via `vite
+  preview`; backup/restore/reset/import tests green); **staging run + publish remain
+  Owner-gated**.
+- Do not publish staging or production without separate Owner approval.
+
+### Pending physical-device tasks (Owner must execute; not marked PASS here)
+
+- Real-device checklist: Android, iOS, Windows, macOS — microphone permission grant/
+  deny, TTS availability, unsupported-API fallback, slow-network behaviour, with device
+  names/OS versions recorded. All rows currently `UNTESTED`.
+
+### Outstanding Owner decisions / actions
+
+1. Enable branch protection (recommended `typecheck`, `test`, `build`, `e2e`) on `main`.
+2. Approve/create `staging` environment + Pages; run staging workflow (publish=false first).
+3. Provide physical hardware for real-device matrix execution.
+4. Decide on PR #5 merge.
+5. Decide on production deploy timing/content.
+
 ## Reproduce locally
 
 ```bash
