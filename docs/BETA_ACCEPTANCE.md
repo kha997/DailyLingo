@@ -7,6 +7,10 @@ proposed commit has now passed hosted CI. Four outcomes still require the Owner,
 real hardware, or an independent party. Nothing here is reported as PASS without
 evidence produced in this environment.
 
+**Final engineering sign-off state for the proposed commit: ENGINEERING_VERIFIED —
+OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted CI
+(all four jobs green on PR #5); the remaining Owner-gated items are listed below.
+
 ## Snapshot
 
 | Item | Value |
