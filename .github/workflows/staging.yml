@@ -1,8 +1,20 @@
 name: Staging preview (manual, owner-gated)
 
-# Nothing in this workflow runs on push or schedule. A maintainer must start it
-# manually, type STAGING, and (for a hosted preview) opt in to publish, which
-# still requires the `staging` environment's protection rules to approve.
+# Cloudflare Pages staging deployment.
+#
+# Mechanism: official Cloudflare Pages actions —
+#   - actions/upload-pages-artifact@v3  -> package `dist/` as a Pages artifact
+#   - actions/deploy-pages@v4            -> deploy that Pages artifact to Cloudflare Pages
+# These are the Cloudflare-official actions for Cloudflare Pages deployments; the
+# previous "GitHub Pages" framing was inaccurate. No GitHub Pages actions are used.
+#
+# Safety: the only trigger is workflow_dispatch (manual). There is no push or PR
+# trigger, so an ordinary push or PR cannot deploy. The maintainer must type STAGING
+# and opt in with `publish: true`; the deploy job additionally requires the
+# protected GitHub environment `staging`. The build job always runs validation and
+# uploads a downloadable artifact; the Pages artifact is packaged only when `publish`
+# is true, and only the deploy job consumes it.
+
 on:
   workflow_dispatch:
     inputs:
@@ -30,6 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Require explicit confirmation
         run: |
           if [ "${{ inputs.confirm }}" != "STAGING" ]; then
@@ -65,10 +78,11 @@ jobs:
           name: staging-preview-dist
           path: dist/
           retention-days: 14
-      - name: Package Pages artifact
+      - name: Package Cloudflare Pages artifact
         if: inputs.publish
         uses: actions/upload-pages-artifact@v3
         with:
+          artifact_name: staging
           path: dist/
 
   deploy:
@@ -80,6 +94,8 @@ jobs:
       name: staging
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy to the protected staging environment
+      - name: Deploy to Cloudflare Pages (staging)
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: staging
