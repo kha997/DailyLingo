@@ -304,6 +304,65 @@ is the stable summary of the state reached at the end of the engineering phase.
 4. Decide on PR #5 merge.
 5. Decide on production deploy timing/content.
 
+## Staging readiness report — Cloudflare Pages (final, this session)
+
+Prepared autonomously under Owner authorization for the controlled staging gate.
+**No public deployment was performed.**
+
+### 1. Exact deployment configuration
+
+- Provider: Cloudflare Pages (free plan target).
+- Build command: `npm run build`; output directory: `dist`.
+- Framework preset: Vite (static); Node.js 22 via CI `setup-node`.
+- Staging environment variable: `VITE_BASE_PATH=/DailyLingo/`.
+- Owner-gated workflow: `.github/workflows/staging.yml`
+  (`workflow_dispatch`; inputs `confirm` (must equal `STAGING`) and `publish`
+  (default `false`); jobs `guard -> build -> deploy(only if publish)`; deploy targets
+  GitHub environment `staging`; build uploads artifact + (conditional) Pages artifact).
+- No client-side router exists (grep-verified) -> no SPA `_redirects` fallback required;
+  serving verified via `vite preview` for base path `/DailyLingo/`.
+
+### 2. Free-tier constraints and cost exposure
+
+- Zero-cost target: Cloudflare Pages free plan; static-only build (~1.5 MB `dist`,
+  ~442 kB initial JS raw / ~127 kB gzip) -> negligible usage; no Pages Functions/Workers
+  or SSR planned, so static tier stays.
+
+### 3. Build and rollback verification
+
+- Build verified locally with staging base path: `VITE_BASE_PATH=/DailyLingo/ npm run
+  build` -> exit 0; `dist/index.html` references `/DailyLingo/assets/index-*.js|css`;
+  hashed assets emitted (incl. lazy analytics chunk).
+- Preview verification: `vite preview` served `/DailyLingo/`, hashed JS and CSS -> 200.
+- Rollback: Cloudflare Pages instant rollback to previous deployment (dashboard/CLI);
+  local equivalent = checkout previous commit -> rebuild -> redeploy.
+
+### 4. Privacy and data-recovery provisions
+
+- Static-only staging; no server; no server-side user data; localStorage per-origin
+  (staging origin distinct from production -> no cross-profile leakage).
+- Existing backup/export/reset/import/recovery procedures tested and remain valid.
+
+### 5. Required Cloudflare permissions and Owner actions
+
+- Owner actions: create Cloudflare account/org + Pages project (or GitHub integration);
+  provide `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` (Pages write) as repo secrets;
+  set `VITE_BASE_PATH=/DailyLingo/`; approve `staging` environment; optionally run
+  workflow with `confirm: STAGING`, `publish: true`.
+- Agent performed no deployment and used no credentials.
+
+### 6. Practical physical-device test URL strategy
+
+- Staging URL: `https://<pages-project>.pages.dev/DailyLingo/` (default origin, no
+  custom domain). Physical devices (Android/iOS/Windows/macOS) should load this URL for
+  the real-device Beta matrix; outcomes recorded in `docs/real-device-matrix.md`.
+
+### 7. Remaining security / operational blockers
+
+- None engineering-blocker for staging readiness; remaining Owner actions: Cloudflare
+  account/token provisioning, staging environment approval, hardware for real-device
+  runs, final merge/deploy decisions.
+
 ## Reproduce locally
 
 ```bash
