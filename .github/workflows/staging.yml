@@ -39,6 +39,17 @@ name: Staging preview (manual, owner-gated)
 # approval of the `staging` environment once the Owner configures required reviewers
 # there. With `publish: false` the run is a credential-free build-only validation of the
 # exact commit.
+#
+# Access control: no upload starts unless the production hostname already answers with a
+# Cloudflare Access challenge. The probe is unauthenticated and treats a plain 404/200 as
+# "not proven protected", so a missing project or a missing Access policy fails closed
+# before publication. Preview and immutable deployment URLs cannot exist before the
+# upload, so the same probe checks the production URL, the immutable deployment URL and
+# the branch alias immediately afterwards. If protection is not proven on every URL - a
+# confirmed exposure or an inconclusive probe after retries - the new deployment is
+# deleted, the production hostname is re-probed, and the staging project is deleted if
+# exposure remains. The run then fails closed. Setup and verification steps are in
+# docs/ACCESS_CONTROL.md.
 
 on:
   workflow_dispatch:
@@ -109,6 +120,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci
+      - name: Self-test the Cloudflare Access probe
+        run: npm run test:access-control
       - run: npm run typecheck
       - run: npm run test:coverage
       - name: Build for the Cloudflare Pages root
@@ -133,7 +146,7 @@ jobs:
   deploy:
     name: Deploy to Cloudflare Pages (staging)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: build
     if: inputs.publish
     permissions:
@@ -141,7 +154,7 @@ jobs:
       deployments: write
     environment:
       name: staging
-      url: ${{ steps.deploy.outputs.deployment-url }}
+      url: https://dailylingo-staging.pages.dev
     steps:
       # Two independent typed confirmations are required to publish, because until the
       # Owner configures required reviewers on the `staging` environment, GitHub approval
@@ -188,27 +201,150 @@ jobs:
           name: staging-preview-dist
           path: dist/
 
+      # The production hostname must already answer with an Access challenge.
+      # Preview/immutable deployment URLs cannot exist until this upload, so they
+      # are probed immediately afterwards and rolled back if not protected.
+      - name: Require Cloudflare Access on the production hostname
+        env:
+          ACCESS_PROBE_RETRIES: '2'
+          ACCESS_PROBE_RETRY_DELAY_MS: '2000'
+          STAGING_URL: https://dailylingo-staging.pages.dev/
+        run: |
+          node scripts/verify-access-control.mjs "$STAGING_URL"
+
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.STAGING_BRANCH }}
+          command: pages deploy dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.STAGING_BRANCH }} --commit-hash=${{ github.sha }}
           # The repository carries both package-lock.json and bun.lock; state the intent
           # instead of leaving the action to infer it from whichever lockfile check comes
           # first in a future version.
           packageManager: npm
+          wranglerVersion: '4.157.0'
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
+      # Runs even when the deploy step failed, because a partial upload can still
+      # have created a deployment. The probe always exits 0 in CI mode so its
+      # outputs survive; the enforcement step below is the single failure point.
+      - name: Verify the deployed URLs are behind Cloudflare Access
+        id: access_check
+        if: always()
+        continue-on-error: true
+        env:
+          ACCESS_PROBE_ALWAYS_EXIT_ZERO: '1'
+          ACCESS_PROBE_RETRIES: '4'
+          ACCESS_PROBE_RETRY_DELAY_MS: '3000'
+          STAGING_URL: https://dailylingo-staging.pages.dev/
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+          ALIAS_URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+        run: |
+          urls=("$STAGING_URL")
+          if [ -n "$DEPLOYMENT_URL" ]; then
+            urls+=("$DEPLOYMENT_URL")
+          fi
+          if [ -n "$ALIAS_URL" ]; then
+            urls+=("$ALIAS_URL")
+          fi
+          if [ "$DEPLOY_OUTCOME" = "success" ] && [ -z "$DEPLOYMENT_URL" ]; then
+            echo "::error::wrangler reported no deployment URL after a successful deploy."
+            {
+              echo "protected=false"
+              echo "unprotected=false"
+              echo "inconclusive=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/verify-access-control.mjs "${urls[@]}"
+
+      # A deployment that cannot be proven protected is removed. Inconclusive
+      # probes after retries are included: an unverified staging deployment is
+      # not allowed to stay live.
+      - name: Delete the deployment when Access is not proven
+        id: rollback
+        if: always() && steps.access_check.outputs.protected != 'true' && steps.deploy.outputs.pages-deployment-id != ''
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deployment delete ${{ steps.deploy.outputs.pages-deployment-id }} --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --force
+          packageManager: npm
+          wranglerVersion: '4.157.0'
+
+      # A broken Access application can expose the previous deployment even
+      # after the new one is deleted, so re-probe the production hostname.
+      - name: Re-check Access after deleting the deployment
+        id: access_recheck
+        if: always() && steps.rollback.outcome == 'success'
+        continue-on-error: true
+        env:
+          ACCESS_PROBE_ALWAYS_EXIT_ZERO: '1'
+          ACCESS_PROBE_RETRIES: '2'
+          ACCESS_PROBE_RETRY_DELAY_MS: '2000'
+          STAGING_URL: https://dailylingo-staging.pages.dev/
+        run: |
+          node scripts/verify-access-control.mjs "$STAGING_URL"
+
+      # Last-resort remediation with the Pages-scoped token: remove the staging
+      # project's origin when exposure remains. The Owner must recreate the
+      # project and Access applications before retrying.
+      - name: Delete the staging project when exposure remains
+        id: project_rollback
+        if: always() && steps.access_check.outputs.protected != 'true' && steps.deploy.outputs.pages-deployment-id != '' && (steps.rollback.outcome == 'failure' || steps.rollback.outcome == 'skipped' || steps.access_recheck.outputs.protected != 'true')
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project delete ${{ env.CLOUDFLARE_PAGES_PROJECT }} --yes
+          packageManager: npm
+          wranglerVersion: '4.157.0'
+
       - name: Record the staging URL
+        if: always()
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
           ALIAS_URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          DEPLOYMENT_ID: ${{ steps.deploy.outputs.pages-deployment-id }}
+          ACCESS_PROTECTED: ${{ steps.access_check.outputs.protected }}
+          ACCESS_UNPROTECTED: ${{ steps.access_check.outputs.unprotected }}
+          ACCESS_INCONCLUSIVE: ${{ steps.access_check.outputs.inconclusive }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          PROJECT_ROLLBACK_OUTCOME: ${{ steps.project_rollback.outcome }}
         run: |
           {
             echo "### Cloudflare Pages staging deployment"
+            echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Project: \`$CLOUDFLARE_PAGES_PROJECT\` (branch \`$STAGING_BRANCH\`)"
+            echo "- Production URL: https://$CLOUDFLARE_PAGES_PROJECT.pages.dev/"
             echo "- Deployment URL: ${DEPLOYMENT_URL:-wrangler reported no URL - check the deploy log}"
             echo "- Branch alias URL: ${ALIAS_URL:-not reported by wrangler}"
+            echo "- Deployment ID: ${DEPLOYMENT_ID:-not reported by wrangler}"
+            if [ "$ACCESS_PROTECTED" = "true" ]; then
+              echo "- Access verification: PROVEN on every probed URL"
+            else
+              echo "- Access verification: FAILED (unprotected=${ACCESS_UNPROTECTED:-false}, inconclusive=${ACCESS_INCONCLUSIVE:-unknown})"
+              echo "- Deployment rollback: ${ROLLBACK_OUTCOME:-not attempted}"
+              echo "- Project rollback: ${PROJECT_ROLLBACK_OUTCOME:-not attempted}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce Cloudflare Access verification
+        if: always()
+        env:
+          PROTECTED: ${{ steps.access_check.outputs.protected }}
+          UNPROTECTED: ${{ steps.access_check.outputs.unprotected }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+          PROJECT_ROLLBACK_OUTCOME: ${{ steps.project_rollback.outcome }}
+        run: |
+          if [ "$PROTECTED" != "true" ]; then
+            if [ "$UNPROTECTED" = "true" ]; then
+              detail="app content was reachable without Access"
+            else
+              detail="the probe was inconclusive after retries"
+            fi
+            echo "::error::Cloudflare Access was not proven (${detail}). The run failed closed. Rollback: deployment=${ROLLBACK_OUTCOME:-not attempted}, project=${PROJECT_ROLLBACK_OUTCOME:-not attempted}. If the app is still reachable, delete the staging project or set both Access applications to Block before retrying. Do not share the URL."
+            exit 1
+          fi

@@ -12,9 +12,12 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
-    "verify": "npm run typecheck && npm run test:coverage && npm run test:timezones && npm run build && npm run check:bundle",
+    "verify": "npm run typecheck && npm run test:coverage && npm run test:timezones && npm run test:access-control && npm run build && npm run check:bundle",
     "test:timezones": "node scripts/check-timezones.mjs",
+    "test:access-control": "node scripts/verify-access-control.mjs --self-test",
     "test:e2e:preview": "node scripts/run-e2e-preview.mjs",
+    "staging:auth": "node scripts/capture-access-session.mjs",
+    "test:e2e:staging": "node scripts/run-e2e-staging.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

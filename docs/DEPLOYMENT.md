@@ -13,7 +13,7 @@ Owner authorization.
 
 ```bash
 npm ci
-npm run verify                 # typecheck + coverage + build + bundle budget
+npm run verify                 # access probe self-test + typecheck + coverage + build + bundle budget
 npm run check:bundle           # reads dist/index.html against dist/
 ```
 
@@ -40,16 +40,22 @@ fully self-contained and can be served by any static host.
    creation for Direct Upload projects: if it is not `staging`, the deploy lands on a
    preview deployment, which still refreshes in place under its branch alias URL but not
    at the project root URL `https://dailylingo-staging.pages.dev`.
-2. Create an API token with only the account-scoped permission **Cloudflare Pages: Edit**
+2. Put the project behind Cloudflare Access **before any deployment**, with one
+   application for `dailylingo-staging.pages.dev` and one for
+   `*.dailylingo-staging.pages.dev`, each restricted to explicit tester emails. Follow
+   [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) for the exact Pages
+   "Enable access policy" / known-issues steps and the One-time PIN setup. Verify with
+   `node scripts/verify-access-control.mjs` before publishing.
+3. Create an API token with only the account-scoped permission **Cloudflare Pages: Edit**
    and note the account ID.
-3. **Settings → Environments → New environment → `staging`.**
+4. **Settings → Environments → New environment → `staging`.**
    - Add yourself as a **Required reviewer**.
    - Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as **environment** secrets,
      not repository secrets, so only the deploy job can read them.
-4. Confirm this staging project is separate from any Cloudflare project that serves real
+5. Confirm this staging project is separate from any Cloudflare project that serves real
    users. Nothing on this branch touches production infrastructure.
 
-Steps 1–4 are Cloudflare and GitHub settings. They are intentionally **not** performed by
+Steps 1–5 are Cloudflare and GitHub settings. They are intentionally **not** performed by
 this branch and cannot be performed by the agent: they require credentials the agent must
 not hold. The `dailylingo-staging` project does not exist yet, so staging is not deployed.
 
@@ -62,23 +68,32 @@ not hold. The `dailylingo-staging` project does not exist yet, so staging is not
    - `false` — typecheck, tests, coverage, build, bundle check, base-path assertion, and
      upload a downloadable `staging-preview-dist` artifact. No Cloudflare credential is
      read and nothing is published. Use this as the default review path.
-   - `true` — additionally requires the `publish_phrase` input typed as `DEPLOY-STAGING`,
-     then uploads the artifact the build job validated to Cloudflare Pages with
-     `cloudflare/wrangler-action`, subject to `staging` environment approval.
+   - `true` — additionally requires the `publish_phrase` input typed as `DEPLOY-STAGING`.
+     Before any upload, the workflow proves that Cloudflare Access challenges the
+     production hostname. It then uploads the artifact the build job validated with
+     `cloudflare/wrangler-action`, subject to `staging` environment approval, and probes
+     the production, immutable deployment, and branch alias URLs with retries. If
+     protection is not proven on every URL — confirmed exposure or an inconclusive probe
+     — the new deployment is deleted, production is re-probed, and the project is deleted
+     if exposure remains; the run fails closed.
 
 The workflow builds with `VITE_BASE_PATH=/`, so the deployment URL is
 `https://dailylingo-staging.pages.dev` and the exact URL from the deploy is reported on
-the run and in the environment entry.
+the run and in the environment entry. The upload carries `--commit-hash=<github.sha>`.
 
 ### What the workflow runs
 
-`guard` (confirmation) → `build` (`npm ci`, typecheck, coverage, root-based build, bundle
-budget, base-path assertion, artifact upload) → `deploy` (only when `publish=true`,
-environment `staging`; fails immediately if a credential is missing).
+`guard` (confirmation) → `build` (`npm ci`, Access-probe self-test, typecheck, coverage,
+root-based build, bundle budget, base-path assertion, artifact upload) → `deploy` (only
+when `publish=true`, environment `staging`; fails immediately if a credential is missing,
+then requires an Access challenge on the production hostname before upload, and probes the
+production, immutable deployment, and branch alias URLs afterwards).
 
-A failed guard, typecheck, test, coverage threshold, bundle budget or base-path assertion
-stops the pipeline before any deployment is attempted. The deploy job uploads the bytes
-the build job validated; it does not rebuild.
+A failed guard, self-test, typecheck, test, coverage threshold, bundle budget, base-path
+assertion, or Access preflight stops the pipeline before any deployment is attempted. The
+deploy job uploads the bytes the build job validated; it does not rebuild. The post-upload
+probe always writes its outputs and exits zero, and a separate enforcement step fails the
+run when protection is not proven, so a failed or partial upload cannot bypass the gate.
 
 ## 3. Rollback
 
@@ -88,7 +103,8 @@ Pick the cheapest correct option:
 |---|---|
 | Bad build, previous artifact still retained (14 days) | Re-run the workflow at the **previous verified commit** with `publish=true`. |
 | Bad build, source regression | `git revert <bad-commit>` through the normal PR flow, then deploy the reverted commit. |
-| Staging only, need the site offline | Delete the deployment (or the `dailylingo-staging` project) in the Cloudflare Pages dashboard, or `npx wrangler pages deployment delete`. |
+| Staging only, need the site offline | Delete the deployment (or the `dailylingo-staging` project) in the Cloudflare Pages dashboard, or `npx wrangler pages deployment delete <deployment-id> --project-name dailylingo-staging --force`. |
+| Access control broken or not proven | Stop sharing the URL. The workflow deletes the new deployment, re-probes production, and deletes the project if exposure remains; if a rollback could not be confirmed, do it manually, then set both Access applications to **Block**; follow [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) before retrying. |
 | Learner data problem | Rollback does not touch learner data: it lives in each browser, not on the host. Use the backup/restore procedure in [`OPERATIONS.md`](OPERATIONS.md). |
 
 Never “fix forward” on a deployment that has not passed `npm run verify` and the
@@ -127,5 +143,6 @@ For each staging build, record:
 - workflow run URL
 - `publish` value and environment approval
 - `npm run verify` result and bundle-budget numbers
+- Access preflight and post-deploy probe result (authorized and unauthorized)
 - Playwright result
 - known BLOCKED items from [`BETA_ACCEPTANCE.md`](BETA_ACCEPTANCE.md)
