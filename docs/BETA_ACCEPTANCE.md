@@ -16,16 +16,19 @@ OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted C
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
-| Proposed commit (PR #5 head, final) | `afeb5f91b8deec5cefffb885ff9115697194bc75` |
+| Proposed commit (PR #5 head, final) | `d9ab23adce7934b6b2f6c18bf2267716bf860e4a` |
 | Work location | branch `beta-readiness`, based on the baseline |
 | Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
 | Baseline hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41208027377> (4 jobs green) |
-| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41373657995> (4 jobs green, conclusion success) |
+| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41798651274> (4 jobs green, conclusion success) |
 | Earlier hardening commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
-| Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) |
+| Cloudflare workflow correction | `fbaf7f4` (rewrite) then `d9ab23a` (GitHub context fix); `fbaf7f4` CI run 41798087809 green |
+| Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) / 2026-11-04 (workflow audit) |
 | Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; deploy, repo settings, merge not authorized |
 
-The final PR head is `afeb5f91b8deec5cefffb885ff9115697194bc75`; it contains the hardening commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196`.
+The final PR head is `d9ab23adce7934b6b2f6c18bf2267716bf860e4a`; it contains the hardening
+commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196` and the Cloudflare staging-workflow
+correction. The previously recorded head `afeb5f9` / `ee89b84` are superseded by it.
 
 ## Outcome matrix
 
@@ -215,10 +218,10 @@ deploy decision.
 ### 9. Independent review + green CI, no P0/P1 — BLOCKED
 
 - PR #5 is open from `beta-readiness` → `main` at commit
-  `afeb5f91b8deec5cefffb885ff9115697194bc75` (head), containing hardening commit
+  `d9ab23adce7934b6b2f6c18bf2267716bf860e4a` (head), containing hardening commit
   `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, titled “Beta readiness hardening for
   Issue #4 acceptance”.
-- Hosted CI run [41373657995](https://github.com/kha997/DailyLingo/actions/runs/41373657995)
+- Hosted CI run [41798651274](https://github.com/kha997/DailyLingo/actions/runs/41798651274)
   on that final commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
   `build`, `e2e` (e2e ran the production build via the uploaded artifact).
 - Local typecheck, unit/coverage, timezone matrix, build, bundle budget, and Playwright
@@ -231,7 +234,8 @@ deploy decision.
 - All fixed findings from that pass were re-verified with a fresh local gate run
   (`npm run verify` → 149 unit tests; Playwright 16/16 dev + preview).
 - Hosted CI re-ran green on the docs-only follow-up commits (`740276767…` run
-  41372504556; `afeb5f91…` run 41373657995).
+  41372504556; `afeb5f91…` run 41373657995), on `fbaf7f4…` (run 41798087809) and on the
+  final `d9ab23a…` (run 41798651274).
 
   Current run on the PR: hosted CI on the proposed commit = green, no P0/P1.
 
@@ -280,11 +284,12 @@ is the stable summary of the state reached at the end of the engineering phase.
   WCAG AA contrast audit included; accessibility journeys green.
 - Independent internal review (two subagents): **no blockers**; findings remediated
   or design-scoped; no known **P0/P1** remain.
-- Hosted CI on final proposed commit **`ee89b84976086183b69ee541517c4a38fa2da1b3`**
-  (PR #5 head): **run `41373777355` → conclusion `success`**; all four jobs
-  (`typecheck`, `test`, `build`, `e2e`) green. Earlier green runs: `41372184104`,
-  `41372504556`, `41372782186`, `41373100885`.
-- PR #5 open (`beta-readiness` → `main`) at final head **`ee89b84976086183b69ee541517c4a38fa2da1b3`**;
+- Hosted CI on final proposed commit **`d9ab23adce7934b6b2f6c18bf2267716bf860e4a`**
+  (PR #5 head): **run `41798651274` → conclusion `success`**; all four jobs
+  (`typecheck`, `test`, `build`, `e2e`) green. Earlier green runs on superseded heads:
+  `41372184104`, `41372504556`, `41372782186`, `41373100885`, `41373657995`, `41373777355`,
+  `41798087809`.
+- PR #5 open (`beta-readiness` → `main`) at final head **`d9ab23adce7934b6b2f6c18bf2267716bf860e4a`**;
   **not merged**.
 
 ### Pending deployment tasks (Owner-gated; nothing published)
@@ -361,6 +366,7 @@ The workflow now uses Cloudflare's own GitHub Action, pinned to the commit behin
     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     command: pages deploy dist --project-name=$CLOUDFLARE_PAGES_PROJECT --branch=$STAGING_BRANCH
+    packageManager: npm
 ```
 
 Sources verified on 2026-11-04:
@@ -369,14 +375,21 @@ Sources verified on 2026-11-04:
   `pages deploy <dir> --project-name=<p>` command, and job permissions
   `contents: read` + `deployments: write`.
 - `cloudflare/wrangler-action` README and `action.yml` at the pinned commit — inputs
-  `apiToken`/`accountId`/`command`/`gitHubToken`, outputs `deployment-url`,
-  `pages-deployment-alias-url`, `command-output`; default Wrangler major `4`; package
-  manager inferred from `package-lock.json` first, so this repo resolves to `npm`.
-- Cloudflare "Direct Upload" — the Pages project must exist before the first deploy
-  (`wrangler pages project create`), and its production branch is fixed at creation;
-  a deploy to any other branch is a preview deployment.
+  `apiToken`/`accountId`/`command`/`gitHubToken`/`packageManager`, outputs `deployment-url`,
+  `pages-deployment-alias-url`, `command-output`; default Wrangler major `4`. The action
+  detects the package manager from lockfiles, checking `package-lock.json` first, so this
+  repo resolves to `npm` at the pin; `packageManager: npm` is still stated explicitly
+  because the repo also carries `bun.lock`.
+- Cloudflare "Direct Upload" — the guide creates the Pages project with
+  `wrangler pages project create` before deploying, and a Direct Upload project's
+  production branch is fixed at creation. The guide does not state what wrangler does when
+  the project is absent, so this workflow treats project creation as an Owner prerequisite
+  rather than assuming wrangler will create it.
 - Cloudflare "Preview deployments" — production is `<project>.pages.dev`, previews are
-  `<hash>.<project>.pages.dev`; both at the root path, which is why the base is `/`.
+  `<hash>.<project>.pages.dev`, both at the root path, which is why the base is `/`. A
+  per-deployment hash URL is atomic; a branch alias URL is updated in place by later
+  deploys of that branch. So a `--branch` that is not the production branch still yields a
+  refreshable staging URL, just not the project root URL.
 - Cloudflare API token permissions — `Cloudflare Pages: Edit` is the account-scoped
   permission that creates/edits/deletes Pages projects; that single permission is the
   minimum for this workflow and the token needs nothing else.

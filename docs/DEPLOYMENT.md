@@ -36,9 +36,10 @@ fully self-contained and can be served by any static host.
 
 1. Create a Cloudflare account and a Pages **Direct Upload** project, once:
    `npx wrangler pages project create dailylingo-staging --production-branch staging`.
-   The production branch is fixed at creation for Direct Upload projects, so it must be
-   `staging`; otherwise the workflow's `--branch=staging` deploy produces a one-off
-   `https://<hash>.dailylingo-staging.pages.dev` preview instead of the stable URL.
+   The workflow never creates the project itself. The production branch is fixed at
+   creation for Direct Upload projects: if it is not `staging`, the deploy lands on a
+   preview deployment, which still refreshes in place under its branch alias URL but not
+   at the project root URL `https://dailylingo-staging.pages.dev`.
 2. Create an API token with only the account-scoped permission **Cloudflare Pages: Edit**
    and note the account ID.
 3. **Settings → Environments → New environment → `staging`.**

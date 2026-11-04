@@ -69,9 +69,12 @@ env:
   # Cloudflare Pages Direct Upload project name. Create it once, before the first
   # publication (this is part of the Owner gate):
   #   npx wrangler pages project create dailylingo-staging --production-branch staging
-  # A Direct Upload project's production branch is fixed at creation, so it must be
-  # `staging` for --branch=staging below to update the stable URL
-  # https://dailylingo-staging.pages.dev instead of producing a one-off hash preview.
+  # Cloudflare's Direct Upload guide creates the project that way and this workflow never
+  # creates one, so the project has to exist before a publishing run.
+  # A Direct Upload project's production branch is fixed at creation. `staging` has to be
+  # it, otherwise --branch=staging lands on a preview deployment: still updated in place
+  # under its branch alias URL, but not at the project root URL
+  # https://dailylingo-staging.pages.dev.
   CLOUDFLARE_PAGES_PROJECT: dailylingo-staging
   STAGING_BRANCH: staging
 
@@ -192,6 +195,10 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.STAGING_BRANCH }}
+          # The repository carries both package-lock.json and bun.lock; state the intent
+          # instead of leaving the action to infer it from whichever lockfile check comes
+          # first in a future version.
+          packageManager: npm
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Record the staging URL
