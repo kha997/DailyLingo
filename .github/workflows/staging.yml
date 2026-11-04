@@ -28,8 +28,9 @@ name: Staging preview (manual, owner-gated)
 #
 # Credentials: only the deploy job reads CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
 # and those should be secrets of the protected `staging` environment rather than repository
-# secrets, so no other job can see them. Values are passed to the action through `with:`,
-# never echoed, interpolated into a shell command, or copied into the uploaded bundle. The
+# secrets, so no other job can see them. The values reach the action only through `with:`;
+# they are never echoed, never interpolated into a shell command, and never copied into the
+# uploaded bundle (only a derived true/false presence is passed to the guard step). The
 # token should be account-scoped and hold only `Cloudflare Pages: Edit`.
 #
 # Safety: workflow_dispatch is the only trigger, so no push or pull request can deploy.
@@ -153,12 +154,26 @@ jobs:
           fi
 
       # A missing token must fail loudly here instead of half-way through the upload.
-      # `secrets` is available in step conditions but not in job conditions, hence a step.
+      # The `secrets` context is not available in a step `if` (GitHub's context
+      # availability table), so the values are mapped into `env` for this step only and
+      # tested without ever being printed.
       - name: Require Cloudflare credentials
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        env:
+          CF_API_TOKEN_PRESENT: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CF_ACCOUNT_ID_PRESENT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must both be set as secrets of the 'staging' environment before publishing. Run this workflow with publish=false to validate the build without them."
-          exit 1
+          missing=""
+          if [ "$CF_API_TOKEN_PRESENT" != "true" ]; then
+            missing="$missing CLOUDFLARE_API_TOKEN"
+          fi
+          if [ "$CF_ACCOUNT_ID_PRESENT" != "true" ]; then
+            missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::Required secret(s) not configured on the 'staging' environment:$missing. Run this workflow with publish=false to validate the build without credentials."
+            exit 1
+          fi
+          echo "Both Cloudflare credentials are available to this job."
 
       - uses: actions/checkout@v4
         with:

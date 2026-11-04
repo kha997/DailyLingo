@@ -381,8 +381,12 @@ Sources verified on 2026-11-04:
   permission that creates/edits/deletes Pages projects; that single permission is the
   minimum for this workflow and the token needs nothing else.
 - `actions/upload-pages-artifact` and `actions/deploy-pages` READMEs — GitHub Pages only.
-- GitHub Actions context reference — `secrets` is available in step-level `if` but not in
-  job-level `if`, which is why the credential check is a step, not a job condition.
+- GitHub Actions context availability table — `secrets` is allowed in
+  `jobs.<job_id>.steps.env`, `.with` and `.run`, but **not** in `jobs.<job_id>.if` or
+  `jobs.<job_id>.steps.if`. The credential guard therefore maps a derived presence flag
+  into step `env` and tests it in the shell; a `secrets` reference in a step condition is
+  rejected by GitHub's workflow parser. (Caught by a hosted run: the first push of this
+  workflow produced a zero-job "workflow file issue" failure.)
 
 ### 3. Gates kept, and what each run does
 
@@ -411,10 +415,17 @@ Pages dashboard. Learner data is unaffected — it stays in each browser.
 ### 4. Verified vs not verified (stated honestly)
 
 Verified in this session: workflow YAML parses and passes the GitHub Actions JSON Schema
-(negative control confirms the validator rejects malformed workflows); every action input
-and output used exists in `action.yml` at the pinned commit; root build, bundle budget and
-base-path assertion pass locally; typecheck and the unit/coverage suite pass locally; the
-old configuration provably fails the bundle check.
+(negative control confirms the validator rejects malformed workflows); every `secrets`,
+`inputs`, `env` and `steps` reference was checked programmatically against GitHub's
+context availability table; every action input and output used exists in `action.yml` at
+the pinned commit; root build, bundle budget and base-path assertion pass locally;
+typecheck and the unit/coverage suite pass locally; the old configuration provably fails
+the bundle check.
+
+Hosted feedback was used, not skipped: the first push of this workflow (`fbaf7f4`)
+produced a zero-job run that GitHub labelled a workflow file issue, which traced to the
+`secrets` reference in a step condition. That construct is removed and the guard now maps
+a presence flag through step `env`.
 
 Not verified, and not claimed: any hosted execution of this workflow. A `workflow_dispatch`
 run with `publish: false` is the next step and needs no credentials; a publishing run is
