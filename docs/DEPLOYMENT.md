@@ -3,11 +3,13 @@
 DailyLingo is a static SPA. Deployment means publishing the `dist/` directory; there
 is no server process, database, or runtime secret.
 
-**No workflow in this repository deploys on push.** The only publishing workflow is
-`.github/workflows/staging.yml`, which is `workflow_dispatch`-only, requires the
-literal confirmation `STAGING`, and runs behind the protected `staging`
-environment. Production deployment is out of scope for Beta and needs separate
-Owner authorization.
+**Active staging platform: Cloudflare Workers Static Assets.** The assets-only Worker
+`dailylingo` is built by Workers Builds from branch `staging` and served from
+`dist/`; `wrangler.jsonc` supplies the SPA fallback. Production deployment is out of
+scope for Beta and needs separate Owner authorization.
+
+The earlier Pages Direct Upload workflow remains in the repository as an inactive
+manual fallback only. Do not run it unless the Owner explicitly re-adopts Pages.
 
 ## 1. Build locally
 
@@ -30,70 +32,58 @@ npm run check:bundle           # reads dist/index.html against dist/
 `dist/` contains `index.html`, hashed JS/CSS, and three optimized JPEGs. It is
 fully self-contained and can be served by any static host.
 
-## 2. Manual staging on Cloudflare Pages (owner-gated)
+## 2. Staging on Cloudflare Workers (owner-gated)
+
+DailyLingo is served by the assets-only Worker `dailylingo`. `wrangler.jsonc` uploads
+`dist/` as static assets with `not_found_handling: "single-page-application"`, so
+client-side routes return `index.html`. There is no Worker script, no server process, and
+no runtime secret.
 
 ### One-time setup (Owner only)
 
-1. Create a Cloudflare account and a Pages **Direct Upload** project, once:
-   `npx wrangler pages project create dailylingo-staging --production-branch staging`.
-   The workflow never creates the project itself. The production branch is fixed at
-   creation for Direct Upload projects: if it is not `staging`, the deploy lands on a
-   preview deployment, which still refreshes in place under its branch alias URL but not
-   at the project root URL `https://dailylingo-staging.pages.dev`.
-2. Put the project behind Cloudflare Access **before any deployment**, with one
-   application for `dailylingo-staging.pages.dev` and one for
-   `*.dailylingo-staging.pages.dev`, each restricted to explicit tester emails. Follow
-   [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) for the exact Pages
-   "Enable access policy" / known-issues steps and the One-time PIN setup. Verify with
-   `node scripts/verify-access-control.mjs` before publishing.
-3. Create an API token with only the account-scoped permission **Cloudflare Pages: Edit**
-   and note the account ID.
-4. **Settings → Environments → New environment → `staging`.**
-   - Add yourself as a **Required reviewer**.
-   - Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as **environment** secrets,
-     not repository secrets, so only the deploy job can read them.
-5. Confirm this staging project is separate from any Cloudflare project that serves real
-   users. Nothing on this branch touches production infrastructure.
+1. The Worker project `dailylingo` already exists in the Owner's Cloudflare account. Do
+   not create a second project or delete it.
+2. Put the Worker behind Cloudflare Access **before the first deployment**: Workers &
+   Pages → `dailylingo` → **Access** → **Protect this Worker behind Access** → **All
+   traffic**. Use an `Allow` policy with explicit tester emails, One-time PIN, and a short
+   session (24 hours). Worker-level Access covers the `workers.dev` hostname, preview
+   URLs, routes, and custom domains. Details: [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md).
+3. Workers Builds → Settings → Build: repository `kha997/DailyLingo`, production branch
+   `staging`, root directory `/`, build command `npm run build`, deploy command
+   `npx wrangler deploy`. Set `NODE_VERSION=22` if the build image does not already default
+   to Node 22.
+4. Keep the build command on npm. The repository now ships only `package-lock.json`;
+   `bun.lock` was removed because the frozen bun install on `main` failed before `vite`
+   was installed. Do not switch the build command back to `bun run build`.
+5. Confirm no paid plan or service is required. Do not add a custom domain unless a
+   separate Access application is configured for it.
 
-Steps 1–5 are Cloudflare and GitHub settings. They are intentionally **not** performed by
-this branch and cannot be performed by the agent: they require credentials the agent must
-not hold. The `dailylingo-staging` project does not exist yet, so staging is not deployed.
+Steps 1–5 are Cloudflare settings. They are intentionally **not** performed by the agent:
+they require account access the agent does not hold.
 
 ### Run a staging build
 
-1. Actions → **Staging preview (manual, owner-gated)** → **Run workflow**.
-2. Select the exact commit (not a branch tip you have not verified).
-3. `confirm`: type `STAGING`.
-4. `publish`:
-   - `false` — typecheck, tests, coverage, build, bundle check, base-path assertion, and
-     upload a downloadable `staging-preview-dist` artifact. No Cloudflare credential is
-     read and nothing is published. Use this as the default review path.
-   - `true` — additionally requires the `publish_phrase` input typed as `DEPLOY-STAGING`.
-     Before any upload, the workflow proves that Cloudflare Access challenges the
-     production hostname. It then uploads the artifact the build job validated with
-     `cloudflare/wrangler-action`, subject to `staging` environment approval, and probes
-     the production, immutable deployment, and branch alias URLs with retries. If
-     protection is not proven on every URL — confirmed exposure or an inconclusive probe
-     — the new deployment is deleted, production is re-probed, and the project is deleted
-     if exposure remains; the run fails closed.
+1. Push the approved commit to branch `staging`, or select **Retry build** on that branch
+   in Workers Builds.
+2. Cloudflare installs with npm, runs `npm run build`, then `npx wrangler deploy`. The
+   build is tied to the commit SHA shown in the Workers Builds run.
+3. The deployment URL is `https://dailylingo.<account-subdomain>.workers.dev/`; the exact
+   hostname is shown in the Worker overview and the build log.
+4. Before sharing the URL, confirm an authorized tester can sign in and a private window
+   without a session cannot see the app.
 
-The workflow builds with `VITE_BASE_PATH=/`, so the deployment URL is
-`https://dailylingo-staging.pages.dev` and the exact URL from the deploy is reported on
-the run and in the environment entry. The upload carries `--commit-hash=<github.sha>`.
+### What the build runs
 
-### What the workflow runs
+Workers Builds performs the install from `package-lock.json`, then the build command
+(`npm run build`, which is `vite build` with the root base path), then
+`npx wrangler deploy`. `wrangler.jsonc` uploads exactly the eight files in `dist/`.
+Hosted GitHub CI independently runs `npm ci`, the Access self-test, typecheck, coverage,
+the timezone matrix, the build, the bundle budget, the static-assets dry-run, and the
+Playwright journeys.
 
-`guard` (confirmation) → `build` (`npm ci`, Access-probe self-test, typecheck, coverage,
-root-based build, bundle budget, base-path assertion, artifact upload) → `deploy` (only
-when `publish=true`, environment `staging`; fails immediately if a credential is missing,
-then requires an Access challenge on the production hostname before upload, and probes the
-production, immutable deployment, and branch alias URLs afterwards).
-
-A failed guard, self-test, typecheck, test, coverage threshold, bundle budget, base-path
-assertion, or Access preflight stops the pipeline before any deployment is attempted. The
-deploy job uploads the bytes the build job validated; it does not rebuild. The post-upload
-probe always writes its outputs and exits zero, and a separate enforcement step fails the
-run when protection is not proven, so a failed or partial upload cannot bypass the gate.
+The inactive Pages workflow (`.github/workflows/staging.yml`) is not part of this path. It
+is manual-only and fails closed if run without Pages setup, so it cannot publish by
+accident.
 
 ## 3. Rollback
 
@@ -101,10 +91,10 @@ Pick the cheapest correct option:
 
 | Situation | Action |
 |---|---|
-| Bad build, previous artifact still retained (14 days) | Re-run the workflow at the **previous verified commit** with `publish=true`. |
-| Bad build, source regression | `git revert <bad-commit>` through the normal PR flow, then deploy the reverted commit. |
-| Staging only, need the site offline | Delete the deployment (or the `dailylingo-staging` project) in the Cloudflare Pages dashboard, or `npx wrangler pages deployment delete <deployment-id> --project-name dailylingo-staging --force`. |
-| Access control broken or not proven | Stop sharing the URL. The workflow deletes the new deployment, re-probes production, and deletes the project if exposure remains; if a rollback could not be confirmed, do it manually, then set both Access applications to **Block**; follow [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) before retrying. |
+| Bad build, previous version retained | Roll back to the previous Worker version in Workers & Pages → `dailylingo` → Deployments, or with an authorized `npx wrangler rollback`. |
+| Bad build, source regression | `git revert <bad-commit>` on `staging`, then let Workers Builds deploy the reverted commit. |
+| Staging only, need the site offline | Set the Worker's Access policy to **Block**, or roll back to a known-good version. Do not delete the Worker without Owner approval. |
+| Access control broken or not proven | Stop sharing the URL, set the Worker Access policy to **Block**, roll back the version, then follow [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md) before retrying. |
 | Learner data problem | Rollback does not touch learner data: it lives in each browser, not on the host. Use the backup/restore procedure in [`OPERATIONS.md`](OPERATIONS.md). |
 
 Never “fix forward” on a deployment that has not passed `npm run verify` and the
@@ -140,9 +130,8 @@ absolute and will 404.
 For each staging build, record:
 
 - commit SHA
-- workflow run URL
-- `publish` value and environment approval
+- Workers Builds run and Worker version ID
 - `npm run verify` result and bundle-budget numbers
-- Access preflight and post-deploy probe result (authorized and unauthorized)
+- Access probe result (authorized and unauthorized)
 - Playwright result
 - known BLOCKED items from [`BETA_ACCEPTANCE.md`](BETA_ACCEPTANCE.md)

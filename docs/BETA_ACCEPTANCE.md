@@ -7,6 +7,13 @@ proposed commit has now passed hosted CI. Four outcomes still require the Owner,
 real hardware, or an independent party. Nothing here is reported as PASS without
 evidence produced in this environment.
 
+> **2026-11-04 architecture update:** the Owner connected a Cloudflare **Worker**
+> named `dailylingo`, not a Pages project. The active deployment path is Workers
+> Static Assets plus Worker-level Access. The Pages narrative below is retained as
+> history; the current runbook is in [`DEPLOYMENT.md`](DEPLOYMENT.md) and
+> [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md), and the recovery evidence is in the
+> final section of this record.
+
 **Final engineering sign-off state for the proposed commit: ENGINEERING_VERIFIED —
 OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted CI
 (all four jobs green on PR #5); the remaining Owner-gated items are listed below.
@@ -16,6 +23,9 @@ OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted C
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
+| Deployment platform (2026-11-04) | Cloudflare Worker `dailylingo`, assets-only, Workers Builds from branch `staging` |
+| Worker build repair commit | `f69fb43acaf2c269f3a71603591d414714072a90` |
+| Worker repair hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41852285593> (4 jobs green) |
 | Proposed commit (PR #5 head, final) | `28c909b4910184f93ad1ec9ab7a0d88a017d5e61` — fail-closed Access implementation |
 | Work location | branch `beta-readiness`, based on the baseline |
 | Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
@@ -575,3 +585,68 @@ succeeds; bundle budget passes; 16/16 Playwright tests pass (dev), then 16/16 wi
 Engineering-side actions (commit, push, PR, hosted CI, independent internal review,
 local verification) are complete; the outstanding Owner-gated items are listed in
 the outcome matrix above.
+
+## Worker deployment recovery — 2026-11-04
+
+### 1. Observed failure
+
+Cloudflare dashboard: application `dailylingo`, repository `kha997/DailyLingo`,
+branch `main`, build `00e73ec0`, build command `bun run build`, deploy command
+`npx wrangler deploy`, root `/`. The build stopped in **Installing** after about
+five seconds; build and deploy stages were never reached.
+
+### 2. Root cause
+
+- `dailylingo` is a **Worker** project (Workers Builds), not a Pages project.
+  It has no Wrangler configuration in the repository.
+- Branch `main` is still the pre-Beta baseline. It carries both `bun.lock` and
+  `package-lock.json`; Cloudflare selected bun from `bun.lock`.
+- Reproducing the install on `main` with bun 1.3.14 produced:
+  `error: lockfile had changes, but lockfile is frozen`. The install aborted, so
+  `vite` was never installed and `bun run build` would fail with
+  `vite: command not found`.
+- Even with a successful install, `npx wrangler deploy` had no `wrangler.jsonc`
+  and no static-assets binding, so the Vite `dist/` output was not deployable.
+- The verified branch `beta-readiness` passes `bun install --frozen-lockfile`
+  and `npm ci`, but Cloudflare was not building that branch.
+
+### 3. Repair
+
+- Removed the unused, conflicting `bun.lock`; `package-lock.json` is now the only
+  lockfile and is the path hosted CI already tests.
+- Declared `packageManager: npm@10.9.2` and `engines.node >=22.12`.
+- Pinned `wrangler` 4.157.0 as a dev dependency.
+- Added `wrangler.jsonc`: Worker name `dailylingo`, assets directory `dist/`,
+  `not_found_handling: "single-page-application"`, `workers_dev` and
+  `preview_urls` enabled. Assets-only, so no Worker script is required.
+- Added `npx wrangler deploy --dry-run` to hosted CI's build job.
+
+### 4. Evidence at `f69fb43`
+
+- `npm ci` clean, 0 vulnerabilities; `npm run verify` green (149 unit tests,
+  coverage, 54/54 × 3 timezones, Access self-test 14/14, build, bundle budget).
+- Playwright **16/16** against the production preview.
+- Local `wrangler dev` served `/`, a deep link, and `/assets/index-*.js` with
+  `200`, the app shell, and `text/javascript`.
+- `wrangler deploy --dry-run` read all **8** files in `dist/` with no auth.
+- Hosted CI run
+  [41852285593](https://github.com/kha997/DailyLingo/actions/runs/41852285593):
+  typecheck, test, build, e2e all green; the build log shows Wrangler read the 8
+  assets.
+
+### 5. Not yet verified
+
+No Workers Builds deployment has succeeded yet, so there is no hosted URL,
+authorized or unauthorized browser evidence, or real-device result. All of those
+remain pending the Owner gate below.
+
+### 6. Owner gate for the first live publication
+
+1. Enable Worker Access for **All traffic** with explicit tester emails and
+   One-time PIN before the first build — see [`ACCESS_CONTROL.md`](ACCESS_CONTROL.md).
+2. In Workers Builds settings: production branch `staging`, root `/`, build
+   command `npm run build`, deploy command `npx wrangler deploy`, and
+   `NODE_VERSION=22` if not already the default.
+3. Approve the first build/publish of branch `staging` at the recorded commit.
+4. After it deploys, run the unauthenticated probe and authorized/unauthorized
+   browser checks before sharing the URL.
