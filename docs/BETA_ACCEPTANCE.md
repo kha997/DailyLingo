@@ -27,7 +27,8 @@ OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted C
 | Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) / 2026-11-04 (workflow + Access audit) |
 | Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; Access-control implementation and build-only run executed 2026-11-04 under the deployment mission brief. Publication, repo settings, and merge remain unauthorized |
 
-The current head is `28c909b4910184f93ad1ec9ab7a0d88a017d5e61`; it contains the hardening
+The Access-control code head is `28c909b4910184f93ad1ec9ab7a0d88a017d5e61`; subsequent
+commits on this branch update acceptance documentation only. That code head contains the hardening
 commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, the Cloudflare staging-workflow
 correction (`fbaf7f4` rewrite, `d9ab23a` context fix, `1ca7115` review findings), and the
 fail-closed Access implementation described below. The previously recorded heads `afeb5f9` /
