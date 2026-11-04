@@ -16,19 +16,21 @@ OWNER_GATE_PENDING.** The proposed commit passed local verification and hosted C
 | Item | Value |
 |---|---|
 | Baseline commit | `f6c113fc87a8c859b4f5f64a87c3d360b65fb125` |
-| Proposed commit (PR #5 head, final) | `d9ab23adce7934b6b2f6c18bf2267716bf860e4a` |
+| Proposed commit (PR #5 head, final) | `1ca71151e72e63a52c1b25f12991ebc27c01bee9` for `.github/workflows/staging.yml`; later heads on this branch are documentation-only |
 | Work location | branch `beta-readiness`, based on the baseline |
 | Remote state | `origin/main` still at baseline; `beta-readiness` pushed at the proposed commit; PR #5 open (targeting `main`) |
 | Baseline hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41208027377> (4 jobs green) |
-| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41798651274> (4 jobs green, conclusion success) |
+| Proposed commit hosted CI (final) | <https://github.com/kha997/DailyLingo/actions/runs/41799378313> on `1ca7115…` (4 jobs green, conclusion success) |
 | Earlier hardening commit hosted CI | <https://github.com/kha997/DailyLingo/actions/runs/41372184104> (4 jobs green, conclusion success) |
 | Cloudflare workflow correction | `fbaf7f4` (rewrite) then `d9ab23a` (GitHub context fix); `fbaf7f4` CI run 41798087809 green |
 | Local verification date | 2026-11-01 (local evidence) / 2026-11-02 (proposed-commit evidence) / 2026-11-04 (workflow audit) |
 | Owner authorization | commit/push/PR executed 2026-11-02 under Owner instruction; deploy, repo settings, merge not authorized |
 
-The final PR head is `d9ab23adce7934b6b2f6c18bf2267716bf860e4a`; it contains the hardening
+The workflow-final head is `1ca71151e72e63a52c1b25f12991ebc27c01bee9`; it contains the hardening
 commit `4494855aec9e960f8b9ee4f9281aeb1e4c887196` and the Cloudflare staging-workflow
-correction. The previously recorded head `afeb5f9` / `ee89b84` are superseded by it.
+correction (`fbaf7f4` rewrite, `d9ab23a` context fix, `1ca7115` review findings). Heads after it
+on this branch carry documentation only. The previously recorded heads `afeb5f9` / `ee89b84` /
+`d9ab23a` are superseded.
 
 ## Outcome matrix
 
@@ -218,10 +220,10 @@ deploy decision.
 ### 9. Independent review + green CI, no P0/P1 — BLOCKED
 
 - PR #5 is open from `beta-readiness` → `main` at commit
-  `d9ab23adce7934b6b2f6c18bf2267716bf860e4a` (head), containing hardening commit
+  `1ca71151e72e63a52c1b25f12991ebc27c01bee9` (head), containing hardening commit
   `4494855aec9e960f8b9ee4f9281aeb1e4c887196`, titled “Beta readiness hardening for
   Issue #4 acceptance”.
-- Hosted CI run [41798651274](https://github.com/kha997/DailyLingo/actions/runs/41798651274)
+- Hosted CI run [41799378313](https://github.com/kha997/DailyLingo/actions/runs/41799378313)
   on that final commit: **conclusion success**, all four jobs green — `typecheck`, `test`,
   `build`, `e2e` (e2e ran the production build via the uploaded artifact).
 - Local typecheck, unit/coverage, timezone matrix, build, bundle budget, and Playwright
@@ -234,8 +236,8 @@ deploy decision.
 - All fixed findings from that pass were re-verified with a fresh local gate run
   (`npm run verify` → 149 unit tests; Playwright 16/16 dev + preview).
 - Hosted CI re-ran green on the docs-only follow-up commits (`740276767…` run
-  41372504556; `afeb5f91…` run 41373657995), on `fbaf7f4…` (run 41798087809) and on the
-  final `d9ab23a…` (run 41798651274).
+  41372504556; `afeb5f91…` run 41373657995), on `fbaf7f4…` (run 41798087809), on `d9ab23a…`
+  (run 41798651274) and on the workflow-final `1ca7115…` (run 41799378313).
 
   Current run on the PR: hosted CI on the proposed commit = green, no P0/P1.
 
@@ -284,13 +286,14 @@ is the stable summary of the state reached at the end of the engineering phase.
   WCAG AA contrast audit included; accessibility journeys green.
 - Independent internal review (two subagents): **no blockers**; findings remediated
   or design-scoped; no known **P0/P1** remain.
-- Hosted CI on final proposed commit **`d9ab23adce7934b6b2f6c18bf2267716bf860e4a`**
-  (PR #5 head): **run `41798651274` → conclusion `success`**; all four jobs
+- Hosted CI on final proposed commit **`1ca71151e72e63a52c1b25f12991ebc27c01bee9`**
+  (PR #5 head): **run `41799378313` → conclusion `success`**; all four jobs
   (`typecheck`, `test`, `build`, `e2e`) green. Earlier green runs on superseded heads:
   `41372184104`, `41372504556`, `41372782186`, `41373100885`, `41373657995`, `41373777355`,
   `41798087809`.
-- PR #5 open (`beta-readiness` → `main`) at final head **`d9ab23adce7934b6b2f6c18bf2267716bf860e4a`**;
-  **not merged**.
+- PR #5 open (`beta-readiness` → `main`); **not merged**. `.github/workflows/staging.yml` has not
+  changed since `1ca7115…`; only documentation commits have followed it, and `git diff
+  1ca7115..HEAD -- .github/workflows/` is empty.
 
 ### Pending deployment tasks (Owner-gated; nothing published)
 
@@ -435,15 +438,25 @@ the pinned commit; root build, bundle budget and base-path assertion pass locall
 typecheck and the unit/coverage suite pass locally; the old configuration provably fails
 the bundle check.
 
-Hosted feedback was used, not skipped: the first push of this workflow (`fbaf7f4`)
-produced a zero-job run that GitHub labelled a workflow file issue, which traced to the
-`secrets` reference in a step condition. That construct is removed and the guard now maps
-a presence flag through step `env`.
+Hosted feedback was used, not skipped. The first push of this workflow (`fbaf7f4`)
+produced a zero-job run ([41798081726](https://github.com/kha997/DailyLingo/actions/runs/41798081726))
+that GitHub reports for an invalid workflow file; it traced to the `secrets` reference in a
+step condition, removed in `d9ab23a`.
 
-Not verified, and not claimed: any hosted execution of this workflow. A `workflow_dispatch`
-run with `publish: false` is the next step and needs no credentials; a publishing run is
-impossible until the Owner creates the Cloudflare Pages project and stores the secrets.
-**`STAGING_DEPLOYED` is not the status of this repository.**
+The build-only path has since been executed on a hosted runner: run
+[41799390782](https://github.com/kha997/DailyLingo/actions/runs/41799390782), dispatched
+against `1ca71151e72e63a52c1b25f12991ebc27c01bee9` with `confirm=STAGING`,
+`publish=false` — **conclusion `success`**, `Require explicit confirmation` green,
+`Build and validate (no Cloudflare credentials)` green through `npm ci`, typecheck,
+coverage, the root-based build, `check:bundle`, the root-asset assertion and the artifact
+upload, and `Deploy to Cloudflare Pages (staging)` **`skipped`**. No credential was
+available to that run and nothing was published.
+
+Not verified, and not claimed: a publishing run. It is impossible until the Owner creates
+the Cloudflare Pages project and stores the secrets, so
+**`STAGING_DEPLOYED` is not the status of this repository.** The deploy job's wrangler call
+itself has therefore never executed, and the `pages deploy` behaviour against a real
+account remains untested here by design.
 
 ### 5. Remaining Owner actions (deployment gate)
 
@@ -452,13 +465,47 @@ impossible until the Owner creates the Cloudflare Pages project and stores the s
 2. Create an API token holding only `Cloudflare Pages: Edit`, scoped to that account.
 3. In GitHub: create the `staging` environment, add the Owner as a required reviewer, and
    store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as *environment* secrets.
-4. Optionally run the workflow with `publish: false` to see the hosted build-only path
-   (deploys nothing, uses no credentials).
+4. Reproduce the hosted build-only path at any time (Actions → this workflow → Run
+   workflow → `confirm: STAGING`, `publish: false`) — already executed once, see run
+   41799390782 above; it deploys nothing and uses no credentials.
 5. Authorize a `publish: true` run only when steps 1–3 are done, then smoke-test the
    reported `pages.dev` URL on real devices for the matrix in §2 above.
 
 If the Owner prefers a different project name or branch, those are the two `env:` values at
 the top of `.github/workflows/staging.yml`.
+
+### 6. Independent review record
+
+`INDEPENDENT_REVIEW` — a different agent context, given no implementation narrative, asked
+to falsify the change against primary sources. Reviewed heads: `fbaf7f4`, and it observed
+the follow-up `d9ab23a` mid-audit.
+
+Findings and disposition:
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| 1 | blocker | `secrets` referenced in a step-level `if` is not a valid context position; the pushed file did not compile (zero-job failed run 41798081726) | Confirmed independently — same cause this session found. Fixed in `d9ab23a` (presence flags mapped through `steps.env`), proven by the successful dispatch on `1ca7115` |
+| 2 | minor | "one-off hash preview instead of the stable URL" understates that branch aliases update in place | Accepted; workflow comment and `DEPLOYMENT.md` reworded |
+| 3 | minor | "the Pages project must exist before the first deploy" exceeds what the Direct Upload guide states | Accepted; recorded as an Owner prerequisite rather than wrangler behaviour |
+| 4 | minor | package-manager inference is ambiguous because both `package-lock.json` and `bun.lock` exist | Accepted; `packageManager: npm` stated explicitly |
+
+Confirmed correct by the reviewer, against sources it fetched itself: the pinned SHA is the
+commit behind tag `v4.1.3` and is `releases/latest`; every action input and output used
+exists in `action.yml` at that pin; `pages deploy [DIR] --project-name --branch` is valid
+wrangler v4 syntax; `inputs` in `jobs.<id>.if` and `steps` in `environment.url` are allowed
+contexts; the `dist/` artifact round-trip restores `dist/index.html` (also proven by this
+repo's own passing `e2e` job); the two secrets are confined to the deploy job; typed inputs
+reach the shell only through `env`, so there is no script-injection path; `bash -e` defaults
+mean no step can fail silently; no GitHub Pages permission, action or output remains; and
+`upload-pages-artifact` / `deploy-pages` are genuinely GitHub-Pages-only, which was the
+central claim of this task.
+
+Reviewer's open items (all credential- or account-bound, i.e. Owner-gate territory, not
+workflow defects): behaviour of `--branch` against a missing or unauthorized project, and
+end-to-end environment-secret scoping.
+
+Status of this change set:
+`CLOUDFLARE_WORKFLOW_VERIFIED — DEPLOYMENT_OWNER_GATE_PENDING`. Not `STAGING_DEPLOYED`.
 
 ## Reproduce locally
 
