@@ -13,9 +13,18 @@ import { ExerciseRunner } from './components/ExerciseRunner.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { StreakDetailsModal } from './components/StreakDetailsModal.tsx';
 import { CustomPracticeModal } from './components/CustomPracticeModal.tsx';
+import { FeedbackModal } from './components/FeedbackModal.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
-import { ExerciseItem, LessonUnit, SavedWord, UserStats, Badge, SessionResult } from './types/index.ts';
+import {
+  AppTab,
+  ExerciseItem,
+  LessonUnit,
+  SavedWord,
+  UserStats,
+  Badge,
+  SessionResult,
+} from './types/index.ts';
 import { computeNextReviewDate } from './data/curriculumData.ts';
 import {
   DEFAULT_BADGES,
@@ -53,6 +62,24 @@ const ProgressAnalytics = lazy(() =>
   }))
 );
 
+// The 300-word library is only needed on its own tab, so it ships as a
+// separate chunk rather than growing the initial download.
+const VocabularyLibrary = lazy(() =>
+  import('./components/VocabularyLibrary.tsx').then((module) => ({
+    default: module.VocabularyLibrary,
+  }))
+);
+
+const LibrarySkeleton = () => (
+  <div
+    className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400"
+    role="status"
+    aria-live="polite"
+  >
+    Đang mở thư viện từ vựng…
+  </div>
+);
+
 const AnalyticsSkeleton = () => (
   <div
     className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400"
@@ -66,7 +93,7 @@ const AnalyticsSkeleton = () => (
 const cloneBadges = (): Badge[] => DEFAULT_BADGES.map((badge) => ({ ...badge }));
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'lessons' | 'practice' | 'notebook' | 'analytics'>('lessons');
+  const [activeTab, setActiveTab] = useState<AppTab>('lessons');
   const [userStats, setUserStats] = useState<UserStats>(loadUserStats);
   const [savedWords, setSavedWords] = useState<SavedWord[]>(loadSavedWords);
   const [badges, setBadges] = useState<Badge[]>(loadBadges);
@@ -83,6 +110,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showCustomPracticeModal, setShowCustomPracticeModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Surface corrupt/blocked storage once, without uploading anything.
   useEffect(() => {
@@ -377,6 +405,7 @@ export default function App() {
         userStats={userStats}
         onOpenSettings={() => setShowSettings(true)}
         onOpenStreakModal={() => setShowStreakModal(true)}
+        onOpenFeedback={() => setShowFeedbackModal(true)}
         onToggleTheme={handleToggleTheme}
         currentTheme={userStats.theme || 'light'}
       />
@@ -430,6 +459,23 @@ export default function App() {
             onStartCustomPractice={handleStartCustomPractice}
             onOpenCustomPracticeModal={() => setShowCustomPracticeModal(true)}
           />
+        )}
+
+        {activeTab === 'library' && (
+          <ErrorBoundary
+            fallbackTitle="Không mở được thư viện từ vựng"
+            fallbackMessage="Tiến độ và sổ tay của bạn vẫn an toàn. Hãy tải lại trang hoặc thử lại sau."
+          >
+            <Suspense fallback={<LibrarySkeleton />}>
+              <VocabularyLibrary
+                savedWords={savedWords}
+                onAddWord={handleAddWord}
+                onGoToNotebook={() => setActiveTab('notebook')}
+                audioAccent={userStats.audioAccent}
+                audioRate={userStats.audioRate}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
 
         {activeTab === 'notebook' && (
@@ -508,6 +554,10 @@ export default function App() {
           onClose={() => setShowStreakModal(false)}
           onStartStudy={handleStartDailyChallenge}
         />
+      )}
+
+      {showFeedbackModal && (
+        <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
       )}
 
       <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/80 py-6 mt-12 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors">

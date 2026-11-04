@@ -8,6 +8,8 @@ export type ExerciseType =
 
 export type CEFRLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'IELTS_TOEIC';
 
+export type AppTab = 'lessons' | 'practice' | 'library' | 'notebook' | 'analytics';
+
 export type TopicCategory =
   | 'daily'
   | 'travel'
