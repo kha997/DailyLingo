@@ -16,6 +16,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
   onOpenCustomPracticeModal,
 }) => {
   const [selectedLevel, setSelectedLevel] = useState<string>('all');
+  const totalExercises = units.reduce((sum, unit) => sum + unit.exercises.length, 0);
 
   const filteredUnits = units.filter((u) => {
     if (selectedLevel === 'all') return true;
@@ -31,7 +32,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
             Lộ Trình Học Tập Chuẩn Khung CEFR
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Tổng hợp 12 bài học chuyên sâu từ sơ cấp đến nâng cao với hơn 70 bài tập tương tác.
+            12 bài học từ A1 đến B2 với {totalExercises} bài tập tương tác đã biên soạn.
           </p>
         </div>
 
@@ -47,7 +48,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              {lvl === 'all' ? 'Tất cả (12 bài)' : `${lvl}`}
+              {lvl === 'all' ? `Tất cả (${units.length} bài)` : lvl}
             </button>
           ))}
         </div>
@@ -67,8 +68,11 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
                   <div className="relative aspect-21/9 w-full bg-slate-900 overflow-hidden">
                     <img
                       src={unit.image}
-                      alt={unit.title}
-                      referrerPolicy="no-referrer"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      width={1200}
+                      height={514}
                       className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
@@ -104,7 +108,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
 
                   {/* Exercise types list quick links */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 block mb-2">
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-2">
                       Kỹ năng trong bài học này:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -118,7 +122,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
                           {ex.type === 'flashcard' && '📖 Từ vựng'}
                           {ex.type === 'word-reorder' && '🧩 Sắp xếp câu'}
                           {ex.type === 'listening-cloze' && '🎧 Luyện nghe'}
-                          {ex.type === 'speaking' && '🎙️ Luyện phát âm'}
+                          {ex.type === 'speaking' && '🎙️ Luyện nói'}
                           {ex.type === 'quiz' && '❓ Trắc nghiệm'}
                           {ex.type === 'dialogue' && '💬 Hội thoại'}
                         </button>
@@ -136,7 +140,7 @@ export const LessonCatalog: React.FC<LessonCatalogProps> = ({
                   className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs transition-colors flex items-center justify-center gap-2"
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Bắt Đầu Toàn Bộ Bài Học (+{unit.exercises.length * 15} XP)</span>
+                  <span>Bắt Đầu Bài Học ({unit.exercises.length} bài)</span>
                 </button>
               </div>
             </div>

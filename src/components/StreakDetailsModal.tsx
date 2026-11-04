@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { X, Flame, Calendar, Award, CheckCircle2 } from 'lucide-react';
 import { UserStats } from '../types/index.ts';
+import { getTodayDateString } from '../utils/storage.ts';
+import { useDialogA11y } from '../utils/useDialogA11y.ts';
 
 interface StreakDetailsModalProps {
   userStats: UserStats;
@@ -13,13 +15,30 @@ export const StreakDetailsModal: React.FC<StreakDetailsModalProps> = ({
   onClose,
   onStartStudy,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(dialogRef, onClose);
+
+  const studiedToday = userStats.studyDays.includes(getTodayDateString());
+  const hasStreak = userStats.currentStreak > 0;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 sm:p-8 text-center shadow-xl border border-slate-200 dark:border-slate-800 transition-colors">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+      role="presentation"
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="streak-title"
+        tabIndex={-1}
+        className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 sm:p-8 text-center shadow-xl border border-slate-200 dark:border-slate-800 transition-colors focus:outline-none"
+      >
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+            aria-label="Đóng chi tiết chuỗi ngày"
+            className="p-1 rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -30,25 +49,39 @@ export const StreakDetailsModal: React.FC<StreakDetailsModalProps> = ({
           <Flame className="w-12 h-12 text-amber-500 fill-amber-500 animate-bounce" />
         </div>
 
-        <h3 className="text-2xl font-display font-bold text-slate-900 dark:text-white mb-1">
-          {userStats.currentStreak} Ngày Liên Tiếp!
+        <h3 id="streak-title" className="text-2xl font-display font-bold text-slate-900 dark:text-white mb-1">
+          {hasStreak ? `${userStats.currentStreak} Ngày Liên Tiếp!` : 'Bắt Đầu Chuỗi Ngày Học'}
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
-          Bạn đang giữ thói quen học tập rất tuyệt vời. Đừng để ngọn lửa vụt tắt!
+          {hasStreak
+            ? 'Bạn đang giữ thói quen học tập đều đặn. Đừng để ngọn lửa vụt tắt!'
+            : 'Hoàn thành một bài luyện hôm nay để bắt đầu chuỗi ngày học của bạn.'}
         </p>
 
         {/* Streak Stats */}
         <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-4 mb-6 text-left transition-colors">
           <div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 block font-medium">Chuỗi dài nhất</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">Chuỗi dài nhất</span>
             <span className="text-lg font-bold font-mono text-slate-900 dark:text-white tabular-nums">
               {userStats.longestStreak} ngày
             </span>
           </div>
           <div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 block font-medium">Hôm nay</span>
-            <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400 tabular-nums flex items-center gap-1">
-              <CheckCircle2 className="w-4 h-4" /> Đã duy trì
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">Hôm nay</span>
+            <span
+              className={`text-lg font-bold font-mono tabular-nums flex items-center gap-1 ${
+                studiedToday
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-slate-500 dark:text-slate-400'
+              }`}
+            >
+              {studiedToday ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> Đã học
+                </>
+              ) : (
+                'Chưa học'
+              )}
             </span>
           </div>
         </div>
@@ -60,7 +93,8 @@ export const StreakDetailsModal: React.FC<StreakDetailsModalProps> = ({
             <span>Quy luật 5 phút mỗi ngày</span>
           </div>
           <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
-            Học 5 phút mỗi ngày hiệu quả hơn gấp 10 lần việc học dồn 2 tiếng vào cuối tuần. Bộ não tiếp thu và lưu giữ ngữ pháp tốt nhất qua sự lặp lại ngắt quãng liên tục.
+            Chia nhỏ thời gian học đều mỗi ngày thường dễ duy trì hơn là học dồn một buổi dài.
+            Ứng dụng này khuyến khích những buổi luyện ngắn, lặp lại đều đặn.
           </p>
         </div>
 

@@ -1,3 +1,8 @@
+> **Historical document — superseded.** The evidence below is for the earlier
+> release commits it names (`072e547`, `d0f9b11`, `42912bf`). It is not evidence
+> for the current Beta candidate, which is uncommitted. Current status lives in
+> [`docs/BETA_ACCEPTANCE.md`](docs/BETA_ACCEPTANCE.md).
+
 # DailyLingo — Release Candidate Evidence
 
 This document supersedes any earlier version of `RELEASE_SUMMARY.md`. Every

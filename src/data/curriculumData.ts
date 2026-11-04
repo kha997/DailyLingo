@@ -1,4 +1,5 @@
 import { Badge, LessonUnit, SavedWord } from '../types/index.ts';
+import { IMAGES } from '../assets/images/index.ts';
 
 // 12 Comprehensive Units covering CEFR A1 -> C1 and everyday life to career/academic
 export const LESSON_UNITS: LessonUnit[] = [
@@ -8,7 +9,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Nắm vững các câu chào hỏi, giới thiệu bản thân và thói quen mỗi ngày',
     level: 'A1',
     topic: 'daily',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 6,
     exercises: [
       {
@@ -16,14 +17,14 @@ export const LESSON_UNITS: LessonUnit[] = [
         type: 'flashcard',
         level: 'A1',
         topic: 'daily',
-        title: 'Từ Vựng Cốt Lõi: Hào Hứng',
+        title: 'Từ Vựng Cốt Lõi: Thân Thiện',
         vietnamesePrompt: 'Lật thẻ để xem phát âm, nghĩa tiếng Việt và câu ví dụ',
-        word: 'enthusiastic',
-        ipa: '/ɪnˌθjuː.ziˈæs.tɪk/',
+        word: 'friendly',
+        ipa: '/ˈfrend.li/',
         partOfSpeech: 'adjective',
-        definitionVi: 'Hào hứng, nhiệt huyết, say mê',
-        exampleEn: 'She is very enthusiastic about learning new languages.',
-        exampleVi: 'Cô ấy rất hào hứng với việc học các ngôn ngữ mới.'
+        definitionVi: 'Thân thiện, dễ gần',
+        exampleEn: 'Our new neighbour is very friendly and always says hello.',
+        exampleVi: 'Người hàng xóm mới của chúng tôi rất thân thiện và luôn chào hỏi.'
       },
       {
         id: 'u1-ex-2',
@@ -139,7 +140,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Tự tin hỏi đường, làm thủ tục check-in sân bay và nhận phòng khách sạn',
     level: 'A2',
     topic: 'travel',
-    image: '/src/assets/images/travel_english_art_1790648889488.jpg',
+    image: IMAGES.travel,
     estimatedMinutes: 7,
     exercises: [
       {
@@ -235,7 +236,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Giao tiếp chuyên nghiệp trong cuộc họp, gửi email và phản biện ý kiến',
     level: 'B1',
     topic: 'work',
-    image: '/src/assets/images/business_english_art_1790648901506.jpg',
+    image: IMAGES.business,
     estimatedMinutes: 8,
     exercises: [
       {
@@ -270,10 +271,10 @@ export const LESSON_UNITS: LessonUnit[] = [
         topic: 'work',
         title: 'Luyện Nghe: Email & Deadline',
         vietnamesePrompt: 'Lắng nghe câu trao đổi về hạn chót và điền từ thích hợp',
-        audioText: 'Could you please submit your progress report before the deadline tomorrow?',
+        audioText: "Could you please submit your progress report before tomorrow's deadline?",
         blankWord: 'deadline',
-        fullSentenceEn: 'Could you please submit your progress report before the deadline tomorrow?',
-        fullSentenceVi: 'Bạn có thể vui lòng nộp báo cáo tiến độ trước hạn chót ngày mai được không?',
+        fullSentenceEn: "Could you please submit your progress report before tomorrow's deadline?",
+        fullSentenceVi: 'Bạn có thể vui lòng nộp báo cáo tiến độ trước hạn chót của ngày mai được không?',
         options: ['deadline', 'meeting', 'presentation', 'interview']
       },
       {
@@ -331,7 +332,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Tự tin gọi món, hỏi về nguyên liệu, dị ứng và khen ngợi món ăn',
     level: 'A2',
     topic: 'food',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 6,
     exercises: [
       {
@@ -364,12 +365,12 @@ export const LESSON_UNITS: LessonUnit[] = [
         type: 'listening-cloze',
         level: 'A2',
         topic: 'food',
-        title: 'Luyện Nghe: Gợi Ý Của Bồi Bàn',
-        vietnamesePrompt: 'Lắng nghe gợi ý của phục vụ và chọn từ còn thiếu',
+        title: 'Luyện Nghe: Hỏi Gợi Ý Món Tráng Miệng',
+        vietnamesePrompt: 'Lắng nghe câu hỏi xin gợi ý món tráng miệng và chọn từ còn thiếu',
         audioText: 'What would you recommend for dessert tonight?',
         blankWord: 'recommend',
         fullSentenceEn: 'What would you recommend for dessert tonight?',
-        fullSentenceVi: 'Tối nay bạn gợi ý món tráng miệng nào ngon nhất?',
+        fullSentenceVi: 'Tối nay bạn muốn gợi ý món tráng miệng nào?',
         options: ['recommend', 'request', 'remember', 'refuse']
       },
       {
@@ -395,7 +396,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         quizOptions: [
           {
             id: 'q4-opt1',
-            text: "I am allergic to peanuts, does this contain any?",
+            text: "I am allergic to peanuts. Does this contain any?",
             isCorrect: true,
             explanation: '"To be allergic to + noun" là cấu trúc y tế và đời sống chuẩn xác nhất để thông báo dị ứng.'
           },
@@ -427,7 +428,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Hỏi kích cỡ quần áo, thử đồ, hỏi chính sách hoàn tiền và trả giá lịch thiệp',
     level: 'A2',
     topic: 'daily',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 6,
     exercises: [
       {
@@ -439,7 +440,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         vietnamesePrompt: 'Lật thẻ để xem phát âm, nghĩa tiếng Việt và câu ví dụ',
         word: 'refund',
         ipa: '/ˈriː.fʌnd/',
-        partOfSpeech: 'noun / verb',
+        partOfSpeech: 'noun',
         definitionVi: 'Tiền hoàn lại, trả lại tiền khi trả hàng',
         exampleEn: 'You can get a full refund within thirty days with your receipt.',
         exampleVi: 'Bạn có thể nhận lại toàn bộ tiền trong vòng 30 ngày nếu còn hóa đơn.'
@@ -476,8 +477,8 @@ export const LESSON_UNITS: LessonUnit[] = [
         title: 'Luyện Nói: Hỏi Phương Thức Thanh Toán',
         vietnamesePrompt: 'Đọc to câu hỏi thanh toán thẻ một cách tự nhiên',
         speakingTarget: 'Do you accept contactless payments or Apple Pay?',
-        speakingPhonetic: '/duː juː əkˈsept kɒnˈtækt.ləs ˈpeɪ.mənts...',
-        speakingHint: 'Nhấn trọng âm vào "con-tact-less" và "pay-ments".'
+        speakingPhonetic: '/duː juː əkˈsept ˈkɒn.tækt.ləs ˈpeɪ.mənts...',
+        speakingHint: 'Nhấn trọng âm âm tiết đầu trong "CON-tact-less" và "PAY-ments".'
       },
       {
         id: 'u5-ex-5',
@@ -523,7 +524,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Thảo luận về ứng dụng AI, phần mềm, bảo mật dữ liệu và làm việc từ xa',
     level: 'B1',
     topic: 'tech',
-    image: '/src/assets/images/business_english_art_1790648901506.jpg',
+    image: IMAGES.business,
     estimatedMinutes: 7,
     exercises: [
       {
@@ -549,7 +550,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         vietnamesePrompt: 'Sắp xếp thành câu: "Điều tối quan trọng là phải kích hoạt xác thực hai yếu tố."',
         targetSentence: 'It is crucial to enable two-factor authentication on your account.',
         scrambledWords: ['crucial', 'on', 'to', 'your', 'It', 'account.', 'authentication', 'two-factor', 'is', 'enable'],
-        grammarTip: 'Cấu trúc giả định: "It is crucial to + V-infinitive".'
+        grammarTip: 'Cấu trúc "It is + tính từ + to + V-infinitive" (It is crucial to enable...).'
       },
       {
         id: 'u6-ex-3',
@@ -619,7 +620,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Mời bạn bè đi chơi, hỏi thăm chân thành, tâm sự và duy trì tình bạn đẹp',
     level: 'B1',
     topic: 'social',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 6,
     exercises: [
       {
@@ -643,8 +644,8 @@ export const LESSON_UNITS: LessonUnit[] = [
         topic: 'social',
         title: 'Sắp Xếp Câu: Hẹn Gặp Lại Bạn Cũ',
         vietnamesePrompt: 'Sắp xếp thành câu: "Lâu lắm rồi chúng ta chưa gặp, hãy cùng đi uống cà phê để cập nhật tin tức nhé!"',
-        targetSentence: "It has been ages, let's grab a coffee and catch up soon!",
-        scrambledWords: ['ages,', 'a', 'soon!', 'has', 'coffee', 'and', 'catch', 'let\'s', 'It', 'grab', 'up', 'been'],
+        targetSentence: "It has been ages, so let's grab a coffee and catch up soon!",
+        scrambledWords: ['ages,', 'a', 'soon!', 'has', 'coffee', 'and', 'catch', 'so', 'let\'s', 'It', 'grab', 'up', 'been'],
         grammarTip: '"Catch up" là thành ngữ rất phổ biến mang nghĩa "hàn huyên, cập nhật cuộc sống của nhau sau thời gian xa cách".'
       },
       {
@@ -715,7 +716,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Mô tả triệu chứng bệnh, đặt lịch hẹn bác sĩ và nói về lối sống lành mạnh',
     level: 'B1',
     topic: 'daily',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 7,
     exercises: [
       {
@@ -811,7 +812,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Nâng tầm cách diễn đạt với các thành ngữ tự nhiên và từ nối ăn điểm cao',
     level: 'B2',
     topic: 'social',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 8,
     exercises: [
       {
@@ -907,7 +908,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Trả lời các câu hỏi phỏng vấn hóc búa, nêu bật thế mạnh và đàm phán đãi ngộ',
     level: 'B2',
     topic: 'work',
-    image: '/src/assets/images/business_english_art_1790648901506.jpg',
+    image: IMAGES.business,
     estimatedMinutes: 8,
     exercises: [
       {
@@ -930,7 +931,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         level: 'B2',
         topic: 'work',
         title: 'Sắp Xếp Câu: Nêu Bật Thành Tựu',
-        vietnamesePrompt: 'Sắp xếp thành câu: "Trong vai trò trước đây của tôi, tôi đã dẫn dắt một nhóm gồm năm kỹ sư."',
+        vietnamesePrompt: 'Sắp xếp thành câu: "Trong vai trò trước đây của tôi, tôi đã dẫn dắt một nhóm đa chức năng gồm năm kỹ sư."',
         targetSentence: 'In my previous role, I led a cross-functional team of five engineers.',
         scrambledWords: ['a', 'led', 'engineers.', 'role,', 'of', 'team', 'five', 'In', 'my', 'cross-functional', 'I', 'previous'],
         grammarTip: 'Khi kể về thành tựu trong quá khứ ở CV hoặc phỏng vấn, luôn dùng động từ hành động ở thì quá khứ đơn (led, managed, designed).'
@@ -1003,7 +1004,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Nói tiếng Anh tự nhiên như người bản xứ qua các câu lóng và thành ngữ đời sống',
     level: 'B2',
     topic: 'social',
-    image: '/src/assets/images/english_learning_hero_1790648876420.jpg',
+    image: IMAGES.hero,
     estimatedMinutes: 7,
     exercises: [
       {
@@ -1018,7 +1019,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         partOfSpeech: 'idiom',
         definitionVi: 'Lỡ miệng làm lộ bí mật, bật mí điều bất ngờ',
         exampleEn: 'We were planning a surprise party, but Tom accidentally spilled the beans.',
-        exampleVi: 'Chúng tôi đang lên kế hoạch cho bữa tiệc bất ngờ, nhưng Tom lỡ làm lộ mất.'
+        exampleVi: 'Chúng tôi đang lên kế hoạch cho bữa tiệc bất ngờ, nhưng Tom lỡ miệng làm lộ mất bí mật.'
       },
       {
         id: 'u11-ex-2',
@@ -1051,7 +1052,7 @@ export const LESSON_UNITS: LessonUnit[] = [
         topic: 'social',
         title: 'Luyện Nói: Thành Ngữ "Hit the sack"',
         vietnamesePrompt: 'Đọc to cách nói đi ngủ tự nhiên của người Mỹ',
-        speakingTarget: 'I am completely exhausted after a long journey, time to hit the sack.',
+        speakingTarget: 'I am completely exhausted after a long journey. Time to hit the sack.',
         speakingPhonetic: '/aɪ æm kəmˈpliːt.li ɪɡˈzɔː.stɪd...',
         speakingHint: '"Hit the sack" là tiếng lóng rất thân thuộc tương đương với "go to sleep".'
       },
@@ -1099,7 +1100,7 @@ export const LESSON_UNITS: LessonUnit[] = [
     subtitle: 'Kỹ năng trình bày ý tưởng thuyết phục, chuyển đoạn mượt mà và tranh luận học thuật',
     level: 'B2',
     topic: 'work',
-    image: '/src/assets/images/business_english_art_1790648901506.jpg',
+    image: IMAGES.business,
     estimatedMinutes: 8,
     exercises: [
       {
@@ -1383,32 +1384,32 @@ export const DEFAULT_BADGES: Badge[] = [
     name: 'Bước Chân Đầu Tiên',
     description: 'Hoàn thành bài tập tương tác đầu tiên của bạn',
     iconName: 'Footprints',
-    unlockedAt: '2026-10-25',
+    unlockedAt: null,
     targetCount: 1,
-    currentCount: 1
+    currentCount: 0
   },
   {
     id: 'streak-3',
     name: 'Ngọn Lửa Kiên Trì',
     description: 'Duy trì chuỗi học tập 3 ngày liên tiếp',
     iconName: 'Flame',
-    unlockedAt: '2026-10-27',
+    unlockedAt: null,
     targetCount: 3,
-    currentCount: 3
+    currentCount: 0
   },
   {
     id: 'vocab-collector',
     name: 'Nhà Sưu Tầm Từ Vựng',
-    description: 'Lưu và ghi nhớ từ 5 từ vựng vào sổ tay',
+    description: 'Lưu 5 từ vựng vào sổ tay',
     iconName: 'BookMarked',
-    unlockedAt: '2026-10-26',
+    unlockedAt: null,
     targetCount: 5,
-    currentCount: 12
+    currentCount: 0
   },
   {
     id: 'perfect-score',
-    name: 'Phát Âm Chuẩn Xác',
-    description: 'Đạt độ chính xác phát âm từ 85% trở lên trong bài luyện nói',
+    name: 'Nói Rõ Ràng',
+    description: 'Đạt điểm khớp lời nói từ 85% trở lên trong một bài luyện nói (so khớp văn bản, không phải chấm phát âm)',
     iconName: 'Mic',
     unlockedAt: null,
     targetCount: 1,
@@ -1421,25 +1422,49 @@ export const DEFAULT_BADGES: Badge[] = [
     iconName: 'Trophy',
     unlockedAt: null,
     targetCount: 7,
-    currentCount: 3
+    currentCount: 0
   },
   {
     id: 'mastery-level-2',
     name: 'Cấp Độ Thăng Tiến',
-    description: 'Tích lũy từ 300 điểm kinh nghiệm (XP) trở lên',
+    description: 'Tích lũy 300 điểm kinh nghiệm (XP) từ câu trả lời đúng',
     iconName: 'Zap',
     unlockedAt: null,
     targetCount: 300,
-    currentCount: 180
+    currentCount: 0
   }
 ];
 
+// Parse a YYYY-MM-DD key as a local calendar date. `new Date('YYYY-MM-DD')`
+// parses as UTC and shifts the day in timezones west of UTC.
+function parseLocalDateKey(dateKey: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return null;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function toLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Helper: compute next review date using spaced repetition
 export function computeNextReviewDate(lastReviewed: string, mastery: number, reviewCount: number): string {
-  const lastDate = new Date(lastReviewed);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  lastDate.setHours(0, 0, 0, 0);
+
+  const parsedLastReviewed = parseLocalDateKey(lastReviewed);
+  const lastDate = parsedLastReviewed ?? today;
 
   // Days until next review based on mastery and review count
   let baseDays: number;
@@ -1455,68 +1480,85 @@ export function computeNextReviewDate(lastReviewed: string, mastery: number, rev
     baseDays = 1;
   }
 
-  // Gradually increase interval with each review
-  const intervalFactor = Math.min(2, 1 + reviewCount * 0.2);
-  const finalDays = Math.round(baseDays * intervalFactor);
+  // Gradually increase interval with each review, capped at 2x.
+  const intervalFactor = Math.min(2, 1 + Math.max(0, reviewCount) * 0.2);
+  const finalDays = Math.max(1, Math.round(baseDays * intervalFactor));
 
   const nextDate = new Date(lastDate);
   nextDate.setDate(nextDate.getDate() + finalDays);
 
-  // If the next review is in the past or today, schedule for tomorrow
+  // If the next review is in the past or today, schedule for tomorrow.
   if (nextDate <= today) {
+    nextDate.setTime(today.getTime());
     nextDate.setDate(nextDate.getDate() + 1);
   }
 
-  return nextDate.toLocaleDateString('en-CA');
+  return toLocalDateKey(nextDate);
 }
 
-// Helper to shuffle an array
-function shuffleArray<T>(array: T[]): T[] {
+// Deterministic PRNG (mulberry32) so the daily challenge is reproducible by
+// date instead of reshuffling on every render.
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(array: T[], random: () => number): T[] {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
 }
 
-// Dynamic randomized Daily Challenge: Never repeats the exact same 5 questions!
-export function getDailyChallengeExercises(seed?: number): { unitTitle: string; exercise: LessonUnit['exercises'][0] }[] {
-  // Collect all exercises from all 12 units
+function localDateSeed(date: Date): number {
+  return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+
+/**
+ * Five exercises for the day. The same date always produces the same set, so
+ * "daily challenge" is a real schedule rather than a fresh random draw on each
+ * click. Mocks/automation can pass an explicit seed.
+ */
+export function getDailyChallengeExercises(
+  seed: number = localDateSeed(new Date())
+): { unitTitle: string; exercise: LessonUnit['exercises'][0] }[] {
   const allPool: { unitTitle: string; exercise: LessonUnit['exercises'][0] }[] = [];
-  
+
   LESSON_UNITS.forEach((unit) => {
-    unit.exercises.forEach((ex) => {
-      allPool.push({
-        unitTitle: unit.title,
-        exercise: ex,
-      });
+    unit.exercises.forEach((exercise) => {
+      allPool.push({ unitTitle: unit.title, exercise });
     });
   });
 
-  // Shuffle the pool to ensure non-repetitive daily challenges
-  const shuffled = shuffleArray(allPool);
+  const random = createSeededRandom(seed);
+  const typesNeeded: LessonUnit['exercises'][0]['type'][] = [
+    'flashcard',
+    'word-reorder',
+    'listening-cloze',
+    'speaking',
+    'quiz',
+  ];
 
-  // Pick diverse exercise types (e.g. 1 flashcard, 1 word-reorder, 1 listening-cloze, 1 speaking, 1 quiz)
-  const typesNeeded = ['flashcard', 'word-reorder', 'listening-cloze', 'speaking', 'quiz'];
   const selected: { unitTitle: string; exercise: LessonUnit['exercises'][0] }[] = [];
 
-  typesNeeded.forEach((t) => {
-    const found = shuffled.find(
-      (item) => item.exercise.type === t && !selected.some((s) => s.exercise.id === item.exercise.id)
+  typesNeeded.forEach((type) => {
+    const candidates = seededShuffle(
+      allPool.filter((item) => item.exercise.type === type),
+      random
     );
-    if (found) {
-      selected.push(found);
-    }
+    const pick = candidates.find(
+      (item) => !selected.some((chosen) => chosen.exercise.id === item.exercise.id)
+    );
+    if (pick) selected.push(pick);
   });
 
-  // If still need more to reach 5, fill from remaining
-  for (const item of shuffled) {
-    if (selected.length >= 5) break;
-    if (!selected.some((s) => s.exercise.id === item.exercise.id)) {
-      selected.push(item);
-    }
-  }
-
-  return selected.slice(0, 5);
+  return selected;
 }

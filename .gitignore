@@ -9,3 +9,6 @@ blob-report/
 *.log
 .env*
 !.env.example
+.superpowers/
+.auth/
+.wrangler/
