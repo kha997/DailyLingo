@@ -14,33 +14,43 @@ Owner authorization.
 ```bash
 npm ci
 npm run verify                 # typecheck + coverage + build + bundle budget
-VITE_BASE_PATH=/DailyLingo/ npm run build
-npx vite preview --port 4173   # smoke-test http://localhost:4173/DailyLingo/
+npm run check:bundle           # reads dist/index.html against dist/
 ```
 
-- Root hosting (`https://example.com/`): leave `VITE_BASE_PATH` unset.
-- Project sub-path (`https://example.com/DailyLingo/`): set `VITE_BASE_PATH` at
-  build time. It must match the served path exactly, including the trailing slash.
+- Cloudflare Pages, and any other host that serves the site at the root of a domain,
+  needs `VITE_BASE_PATH` unset or `/`. The staging workflow builds this way.
+- A project sub-path (`https://example.com/DailyLingo/`) needs `VITE_BASE_PATH` set at
+  build time, matching the served path exactly including the trailing slash. That is a
+  GitHub Pages project-site convention, not what Cloudflare Pages serves.
+- `npm run check:bundle` resolves asset references relative to `dist/`, so it fails on a
+  sub-path build. Do not run it after building with a non-root base.
 - The build is immutable per commit; do not rebuild from a moving branch when
   validating a release candidate.
 
 `dist/` contains `index.html`, hashed JS/CSS, and three optimized JPEGs. It is
 fully self-contained and can be served by any static host.
 
-## 2. Manual staging on GitHub Pages (owner-gated)
+## 2. Manual staging on Cloudflare Pages (owner-gated)
 
-### One-time repository setup (Owner only)
+### One-time setup (Owner only)
 
-1. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-2. **Settings → Environments → New environment → `staging`.**
+1. Create a Cloudflare account and a Pages **Direct Upload** project, once:
+   `npx wrangler pages project create dailylingo-staging --production-branch staging`.
+   The production branch is fixed at creation for Direct Upload projects, so it must be
+   `staging`; otherwise the workflow's `--branch=staging` deploy produces a one-off
+   `https://<hash>.dailylingo-staging.pages.dev` preview instead of the stable URL.
+2. Create an API token with only the account-scoped permission **Cloudflare Pages: Edit**
+   and note the account ID.
+3. **Settings → Environments → New environment → `staging`.**
    - Add yourself as a **Required reviewer**.
-   - Optionally restrict deployment branches to `main`.
-3. Confirm the repository does **not** already publish a production site from
-   Pages. A repository has one Pages site; publishing staging replaces whatever
-   that site currently serves.
+   - Store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as **environment** secrets,
+     not repository secrets, so only the deploy job can read them.
+4. Confirm this staging project is separate from any Cloudflare project that serves real
+   users. Nothing on this branch touches production infrastructure.
 
-These are repository settings. They are intentionally **not** changed by this
-branch and cannot be changed by the agent.
+Steps 1–4 are Cloudflare and GitHub settings. They are intentionally **not** performed by
+this branch and cannot be performed by the agent: they require credentials the agent must
+not hold. The `dailylingo-staging` project does not exist yet, so staging is not deployed.
 
 ### Run a staging build
 
@@ -48,22 +58,26 @@ branch and cannot be changed by the agent.
 2. Select the exact commit (not a branch tip you have not verified).
 3. `confirm`: type `STAGING`.
 4. `publish`:
-   - `false` — typecheck, tests, coverage, build, bundle check, and upload a downloadable
-     `staging-preview-dist` artifact. Nothing is published. Use this as the
-     default review path.
-   - `true` — additionally deploy `dist/` to the `staging` environment, subject to
-     its required-reviewer rule.
+   - `false` — typecheck, tests, coverage, build, bundle check, base-path assertion, and
+     upload a downloadable `staging-preview-dist` artifact. No Cloudflare credential is
+     read and nothing is published. Use this as the default review path.
+   - `true` — additionally requires the `publish_phrase` input typed as `DEPLOY-STAGING`,
+     then uploads the artifact the build job validated to Cloudflare Pages with
+     `cloudflare/wrangler-action`, subject to `staging` environment approval.
 
-The workflow builds with `VITE_BASE_PATH=/DailyLingo/`, so the preview URL is
-`https://<owner>.github.io/DailyLingo/`.
+The workflow builds with `VITE_BASE_PATH=/`, so the deployment URL is
+`https://dailylingo-staging.pages.dev` and the exact URL from the deploy is reported on
+the run and in the environment entry.
 
 ### What the workflow runs
 
-`guard` (confirmation) → `build` (`npm ci`, typecheck, coverage, build, bundle budget,
-artifact upload) → `deploy` (only when `publish=true`, environment `staging`).
+`guard` (confirmation) → `build` (`npm ci`, typecheck, coverage, root-based build, bundle
+budget, base-path assertion, artifact upload) → `deploy` (only when `publish=true`,
+environment `staging`; fails immediately if a credential is missing).
 
-A failed guard, typecheck, test, coverage threshold, or bundle budget stops the
-pipeline before any artifact is published.
+A failed guard, typecheck, test, coverage threshold, bundle budget or base-path assertion
+stops the pipeline before any deployment is attempted. The deploy job uploads the bytes
+the build job validated; it does not rebuild.
 
 ## 3. Rollback
 
@@ -73,7 +87,7 @@ Pick the cheapest correct option:
 |---|---|
 | Bad build, previous artifact still retained (14 days) | Re-run the workflow at the **previous verified commit** with `publish=true`. |
 | Bad build, source regression | `git revert <bad-commit>` through the normal PR flow, then deploy the reverted commit. |
-| Staging only, need the site offline | Settings → Pages → unpublish, or deploy an empty/placeholder artifact. |
+| Staging only, need the site offline | Delete the deployment (or the `dailylingo-staging` project) in the Cloudflare Pages dashboard, or `npx wrangler pages deployment delete`. |
 | Learner data problem | Rollback does not touch learner data: it lives in each browser, not on the host. Use the backup/restore procedure in [`OPERATIONS.md`](OPERATIONS.md). |
 
 Never “fix forward” on a deployment that has not passed `npm run verify` and the

@@ -2,18 +2,42 @@ name: Staging preview (manual, owner-gated)
 
 # Cloudflare Pages staging deployment.
 #
-# Mechanism: official Cloudflare Pages actions —
-#   - actions/upload-pages-artifact@v3  -> package `dist/` as a Pages artifact
-#   - actions/deploy-pages@v4            -> deploy that Pages artifact to Cloudflare Pages
-# These are the Cloudflare-official actions for Cloudflare Pages deployments; the
-# previous "GitHub Pages" framing was inaccurate. No GitHub Pages actions are used.
+# Deployment mechanism, verified against official documentation on 2026-11-04:
 #
-# Safety: the only trigger is workflow_dispatch (manual). There is no push or PR
-# trigger, so an ordinary push or PR cannot deploy. The maintainer must type STAGING
-# and opt in with `publish: true`; the deploy job additionally requires the
-# protected GitHub environment `staging`. The build job always runs validation and
-# uploads a downloadable artifact; the Pages artifact is packaged only when `publish`
-# is true, and only the deploy job consumes it.
+#   cloudflare/wrangler-action is Cloudflare's own GitHub Action. It installs Wrangler
+#   and runs the command given in `with.command`; `pages deploy <dir> --project-name=<p>`
+#   uploads build output to a Cloudflare Pages Direct Upload project.
+#     - https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/
+#     - https://github.com/cloudflare/wrangler-action
+#   Pinned to the commit behind release v4.1.3 (2026-09-24), the latest at audit time,
+#   so the pinned action cannot be re-pointed. Update by moving the SHA to the commit
+#   behind the newest tag and re-running build-only validation.
+#
+#   The previous revision used actions/upload-pages-artifact@v3 and actions/deploy-pages@v4.
+#   Both are GitHub Pages actions — upload-pages-artifact describes itself as "A composite
+#   action for packaging and uploading an artifact that can be deployed to GitHub Pages" —
+#   and neither can deploy to Cloudflare Pages. They are removed here, together with the
+#   `pages: write` and `id-token: write` permissions they required, because the workflow
+#   no longer has a GitHub Pages site to deploy.
+#
+# Base path: Cloudflare Pages serves a project at the root of https://<project>.pages.dev/
+# (preview deployments at https://<hash>.<project>.pages.dev/), so the bundle must be built
+# with VITE_BASE_PATH=/. The earlier /DailyLingo/ base was a GitHub Pages project-site
+# convention: on pages.dev every asset URL would 404, and locally `npm run check:bundle`
+# resolves dist-root-relative and fails with ENOENT on dist/DailyLingo/assets/*.
+#
+# Credentials: only the deploy job reads CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
+# and those should be secrets of the protected `staging` environment rather than repository
+# secrets, so no other job can see them. Values are passed to the action through `with:`,
+# never echoed, interpolated into a shell command, or copied into the uploaded bundle. The
+# token should be account-scoped and hold only `Cloudflare Pages: Edit`.
+#
+# Safety: workflow_dispatch is the only trigger, so no push or pull request can deploy.
+# Publishing requires all of: the maintainer typing STAGING, `publish` explicitly set to
+# true, and a second typed phrase DEPLOY-STAGING that is read by no other job — plus
+# approval of the `staging` environment once the Owner configures required reviewers
+# there. With `publish: false` the run is a credential-free build-only validation of the
+# exact commit.
 
 on:
   workflow_dispatch:
@@ -23,34 +47,50 @@ on:
         required: true
         type: string
       publish:
-        description: Publish the built bundle to the protected staging Pages environment
+        description: Deploy the bundle validated by this run to Cloudflare Pages staging
         required: true
         type: boolean
         default: false
+      publish_phrase:
+        description: Type DEPLOY-STAGING to authorize publishing (only read when publish=true)
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: staging-preview
   cancel-in-progress: false
 
+env:
+  # Cloudflare Pages Direct Upload project name. Create it once, before the first
+  # publication (this is part of the Owner gate):
+  #   npx wrangler pages project create dailylingo-staging --production-branch staging
+  # A Direct Upload project's production branch is fixed at creation, so it must be
+  # `staging` for --branch=staging below to update the stable URL
+  # https://dailylingo-staging.pages.dev instead of producing a one-off hash preview.
+  CLOUDFLARE_PAGES_PROJECT: dailylingo-staging
+  STAGING_BRANCH: staging
+
 jobs:
   guard:
+    name: Require explicit confirmation
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Require explicit confirmation
+      - name: Check the confirmation phrase
+        env:
+          CONFIRM: ${{ inputs.confirm }}
         run: |
-          if [ "${{ inputs.confirm }}" != "STAGING" ]; then
+          if [ "$CONFIRM" != "STAGING" ]; then
             echo "::error::Type STAGING in the confirm input to run this workflow."
             exit 1
           fi
 
   build:
+    name: Build and validate (no Cloudflare credentials)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: guard
@@ -67,35 +107,86 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:coverage
-      - name: Build for the repository sub-path
+      - name: Build for the Cloudflare Pages root
         run: npm run build
         env:
-          VITE_BASE_PATH: /DailyLingo/
+          VITE_BASE_PATH: /
       - run: npm run check:bundle
-      - name: Upload downloadable preview (no deployment)
+      - name: Assert asset URLs are root-absolute, not sub-path based
+        run: |
+          if grep -q '"/DailyLingo/' dist/index.html; then
+            echo "::error::dist/index.html still uses a /DailyLingo/ base. Cloudflare Pages serves at the root of <project>.pages.dev; build with VITE_BASE_PATH=/."
+            exit 1
+          fi
+          grep -q 'src="/assets/' dist/index.html
+      - name: Upload downloadable preview
         uses: actions/upload-artifact@v4
         with:
           name: staging-preview-dist
           path: dist/
           retention-days: 14
-      - name: Package Cloudflare Pages artifact
-        if: inputs.publish
-        uses: actions/upload-pages-artifact@v3
-        with:
-          artifact_name: staging
-          path: dist/
 
   deploy:
+    name: Deploy to Cloudflare Pages (staging)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
     if: inputs.publish
+    permissions:
+      contents: read
+      deployments: write
     environment:
       name: staging
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.deployment-url }}
     steps:
-      - name: Deploy to Cloudflare Pages (staging)
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # Two independent typed confirmations are required to publish, because until the
+      # Owner configures required reviewers on the `staging` environment, GitHub approval
+      # is not yet enforcing anything on its own. Referring to an undefined environment
+      # does not create protection: the Owner must create it.
+      - name: Require the publish authorization phrase
+        env:
+          PUBLISH_PHRASE: ${{ inputs.publish_phrase }}
+        run: |
+          if [ "$PUBLISH_PHRASE" != "DEPLOY-STAGING" ]; then
+            echo "::error::Publishing requires typing DEPLOY-STAGING in the publish_phrase input, in addition to publish=true. Re-run with publish=false for build-only validation."
+            exit 1
+          fi
+
+      # A missing token must fail loudly here instead of half-way through the upload.
+      # `secrets` is available in step conditions but not in job conditions, hence a step.
+      - name: Require Cloudflare credentials
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' || secrets.CLOUDFLARE_ACCOUNT_ID == '' }}
+        run: |
+          echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must both be set as secrets of the 'staging' environment before publishing. Run this workflow with publish=false to validate the build without them."
+          exit 1
+
+      - uses: actions/checkout@v4
         with:
-          artifact_name: staging
+          ref: ${{ github.sha }}
+
+      - name: Reuse the bundle the build job validated
+        uses: actions/download-artifact@v4
+        with:
+          name: staging-preview-dist
+          path: dist/
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ env.STAGING_BRANCH }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Record the staging URL
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+          ALIAS_URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+        run: |
+          {
+            echo "### Cloudflare Pages staging deployment"
+            echo "- Project: \`$CLOUDFLARE_PAGES_PROJECT\` (branch \`$STAGING_BRANCH\`)"
+            echo "- Deployment URL: ${DEPLOYMENT_URL:-wrangler reported no URL - check the deploy log}"
+            echo "- Branch alias URL: ${ALIAS_URL:-not reported by wrangler}"
+          } >> "$GITHUB_STEP_SUMMARY"

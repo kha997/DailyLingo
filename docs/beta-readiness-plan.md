@@ -36,7 +36,7 @@ capabilities, losing local learning data, or requiring paid infrastructure.
 | Decision | Rationale |
 |---|---|
 | Static SPA remains local-first | No backend/secrets needed; preserves existing data model. |
-| GitHub Pages staging via manual `workflow_dispatch` + `staging` environment | Free, built into the repo, owner-gated; no credentials in this session. |
+| Cloudflare Pages staging (Direct Upload via `cloudflare/wrangler-action`) behind manual `workflow_dispatch` + `staging` environment | Free tier, owner-gated, no credentials in this session. Originally recorded as GitHub Pages; corrected on 2026-11-04 because the workflow was using GitHub Pages actions that cannot deploy to Cloudflare. |
 | Grading is transcript/answer based | Web Speech API cannot provide phoneme-level pronunciation scores. Labels must say so. |
 | Corrupt localStorage is backed up before defaults are written | Protects legitimate user data and makes recovery auditable. |
 | Analytics is lazy-loaded | `recharts` is ~67% of the current JS bundle; it is only needed on one tab. |

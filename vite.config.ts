@@ -4,8 +4,9 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 /**
- * `VITE_BASE_PATH` lets the same commit serve from a sub-path (for example a
- * gated GitHub Pages staging preview) without forking the config.
+ * `VITE_BASE_PATH` lets the same commit serve from a different root (for example a
+ * `/DailyLingo/` project sub-path) without forking the config. Cloudflare Pages and
+ * most hosts serve at the root, so staging builds with `VITE_BASE_PATH=/`.
  */
 export default defineConfig(() => {
   return {

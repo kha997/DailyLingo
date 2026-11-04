@@ -36,22 +36,27 @@ Evidence:
 - [`DEPLOYMENT.md`](DEPLOYMENT.md): static build, base-path rules, owner-gated
   staging, rollback table, production gate.
 - `.github/workflows/staging.yml`: `workflow_dispatch` only; requires typing
-  `STAGING`; `publish` defaults to false; publish job runs behind the `staging`
-  environment with required reviewers; build uses `VITE_BASE_PATH=/DailyLingo/`.
+  `STAGING`; `publish` defaults to false; deploy job runs behind the `staging`
+  environment with required reviewers; deploys with
+  `cloudflare/wrangler-action` (`pages deploy dist --project-name=... --branch=staging`);
+  build uses `VITE_BASE_PATH=/`.
 - `.github/workflows/ci.yml`: typecheck/test/build/e2e with artifacts; no deploy step.
 - Backup/export/import/reset covered by unit tests and an E2E journey
   (export → reset with `XOA` → import → data restored). Corrupt data is copied to
   `dailylingo_recovery_*` before defaults are written.
-- Sub-path build proven locally: `VITE_BASE_PATH=/DailyLingo/ npm run build`
-  produced `/DailyLingo/assets/...` references; `vite preview` returned HTTP 200
-  for both the index and the hashed JS asset at that path.
+- Root build proven locally: `VITE_BASE_PATH=/ npm run build` produced
+  `/assets/index-*.js` references and `npm run check:bundle` passed. The earlier
+  `VITE_BASE_PATH=/DailyLingo/` build passed `vite preview` at that sub-path but makes
+  `npm run check:bundle` fail with `ENOENT ... dist/DailyLingo/assets/*` and would 404
+  every asset on `pages.dev`; see the audit below.
 - All 16 Playwright journeys also pass against the production bundle
   (`npm run test:e2e:preview`), and CI runs them from the uploaded build
   artifact instead of the dev server.
 
 Not yet demonstrated: a hosted staging run and an approved deploy. Requires the
-Owner to enable Pages, create/protect the `staging` environment, and authorize a
-workflow run. **BLOCKED on Owner.**
+Owner to create the Cloudflare Pages project, store the two `staging` environment
+secrets, protect the `staging` environment, and authorize a workflow run.
+**BLOCKED on Owner.**
 
 ### 2. Real-device / browser matrix — BLOCKED
 
@@ -181,9 +186,11 @@ for device triage.
 Evidence: [`BRANCH_PROTECTION.md`](BRANCH_PROTECTION.md) with rules, exact `gh api`
 commands, a ruleset alternative, and post-enable verification steps.
 
-Current state checked read-only: `main` is **not protected** (`404 Branch not
-protected`); the repository is public; Pages is not enabled. No settings were
-changed. Applying protection requires the Owner.
+Current state checked read-only on 2026-11-04: `main` is **not protected** (`404 Branch
+not protected`); the repository is public; GitHub Pages is not enabled (`/pages` → 404);
+no `staging` environment exists and no repository Actions secrets exist (both lists
+empty). No settings were changed and no credential was created or requested. Applying
+protection requires the Owner.
 
 ### 8. Reproducible build/install/recovery/test docs on exact commit — IN_PROGRESS
 
@@ -283,10 +290,10 @@ is the stable summary of the state reached at the end of the engineering phase.
 ### Pending deployment tasks (Owner-gated; nothing published)
 
 - Finalize non-public Cloudflare Pages staging deployment plan (build command,
-  output directory, base path `/DailyLingo/`, env `VITE_BASE_PATH`, rollback path).
+  output directory, base path `/`, env `VITE_BASE_PATH`, rollback path).
 - Verify build output / configuration / rollback and data-recovery procedures against
-  the final commit — **already verified locally** (sub-path build 200 OK via `vite
-  preview`; backup/restore/reset/import tests green); **staging run + publish remain
+  the final commit — **already verified locally** (root build + bundle budget green;
+  backup/restore/reset/import tests green); **staging run + publish remain
   Owner-gated**.
 - Do not publish staging or production without separate Owner approval.
 
@@ -299,69 +306,135 @@ is the stable summary of the state reached at the end of the engineering phase.
 ### Outstanding Owner decisions / actions
 
 1. Enable branch protection (recommended `typecheck`, `test`, `build`, `e2e`) on `main`.
-2. Approve/create `staging` environment + Pages; run staging workflow (publish=false first).
+2. Create the Cloudflare Pages project and the `staging` environment (required reviewer +
+   the two environment secrets); then run the staging workflow with `publish=false` first.
 3. Provide physical hardware for real-device matrix execution.
 4. Decide on PR #5 merge.
 5. Decide on production deploy timing/content.
 
-## Staging readiness report — Cloudflare Pages (final, this session)
+## Staging workflow audit and correction — Cloudflare Pages (2026-11-04)
 
 Prepared autonomously under Owner authorization for the controlled staging gate.
-**No public deployment was performed.**
+**No public deployment was performed. No Cloudflare credential exists in this
+repository, and none was requested.**
 
-### 1. Exact deployment configuration
+### 1. Defect found
 
-- Provider: Cloudflare Pages (free plan target).
-- Build command: `npm run build`; output directory: `dist`.
-- Framework preset: Vite (static); Node.js 22 via CI `setup-node`.
-- Staging environment variable: `VITE_BASE_PATH=/DailyLingo/`.
-- Owner-gated workflow: `.github/workflows/staging.yml`
-  (`workflow_dispatch`; inputs `confirm` (must equal `STAGING`) and `publish`
-  (default `false`); jobs `guard -> build -> deploy(only if publish)`; deploy targets
-  GitHub environment `staging`; build uploads artifact + (conditional) Pages artifact).
-- No client-side router exists (grep-verified) -> no SPA `_redirects` fallback required;
-  serving verified via `vite preview` for base path `/DailyLingo/`.
+`.github/workflows/staging.yml` claimed to deploy to Cloudflare Pages but was built
+entirely on GitHub Pages tooling:
 
-### 2. Free-tier constraints and cost exposure
+| Used before | What it actually is |
+|---|---|
+| `actions/upload-pages-artifact@v3` | GitHub action: "packaging and uploading an artifact that can be deployed to **GitHub Pages**" |
+| `actions/deploy-pages@v4` | GitHub action: deploys a packaged artifact to **GitHub Pages** |
+| `permissions: pages: write`, `id-token: write` | GitHub Pages deployment permissions |
+| `steps.deployment.outputs.page_url` | GitHub Pages action output |
+| `VITE_BASE_PATH=/DailyLingo/` | GitHub Pages *project site* sub-path |
 
-- Zero-cost target: Cloudflare Pages free plan; static-only build (~1.5 MB `dist`,
-  ~442 kB initial JS raw / ~127 kB gzip) -> negligible usage; no Pages Functions/Workers
-  or SSR planned, so static tier stays.
+Neither action can reach the Cloudflare API; no Cloudflare credentials were referenced
+anywhere in the workflow. Commit `17c29cb` changed only the comments, still asserting the
+GitHub Pages actions were "the Cloudflare-official actions", which is false.
 
-### 3. Build and rollback verification
+A second, independent defect: with `VITE_BASE_PATH=/DailyLingo/` the workflow's own
+`npm run check:bundle` step fails. Reproduced locally on this branch:
 
-- Build verified locally with staging base path: `VITE_BASE_PATH=/DailyLingo/ npm run
-  build` -> exit 0; `dist/index.html` references `/DailyLingo/assets/index-*.js|css`;
-  hashed assets emitted (incl. lazy analytics chunk).
-- Preview verification: `vite preview` served `/DailyLingo/`, hashed JS and CSS -> 200.
-- Rollback: Cloudflare Pages instant rollback to previous deployment (dashboard/CLI);
-  local equivalent = checkout previous commit -> rebuild -> redeploy.
+```text
+VITE_BASE_PATH=/DailyLingo/ npm run build && npm run check:bundle
+-> ENOENT: no such file or directory, open 'dist/DailyLingo/assets/index-4CHMCD-t.js'   (exit 1)
 
-### 4. Privacy and data-recovery provisions
+VITE_BASE_PATH=/ npm run build && npm run check:bundle
+-> Bundle budget passed.   (exit 0)   index.html references /assets/index-*.js
+```
 
-- Static-only staging; no server; no server-side user data; localStorage per-origin
-  (staging origin distinct from production -> no cross-profile leakage).
-- Existing backup/export/reset/import/recovery procedures tested and remain valid.
+So the build job could never have gone green, and even if it had, the deployed bundle
+would request `/DailyLingo/assets/*` from a host that serves at the root of
+`<project>.pages.dev` and 404 on every asset.
 
-### 5. Required Cloudflare permissions and Owner actions
+### 2. Corrected mechanism
 
-- Owner actions: create Cloudflare account/org + Pages project (or GitHub integration);
-  provide `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` (Pages write) as repo secrets;
-  set `VITE_BASE_PATH=/DailyLingo/`; approve `staging` environment; optionally run
-  workflow with `confirm: STAGING`, `publish: true`.
-- Agent performed no deployment and used no credentials.
+The workflow now uses Cloudflare's own GitHub Action, pinned to the commit behind release
+`v4.1.3` (2026-09-24, latest at audit time):
 
-### 6. Practical physical-device test URL strategy
+```yaml
+- uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+  with:
+    apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    command: pages deploy dist --project-name=$CLOUDFLARE_PAGES_PROJECT --branch=$STAGING_BRANCH
+```
 
-- Staging URL: `https://<pages-project>.pages.dev/DailyLingo/` (default origin, no
-  custom domain). Physical devices (Android/iOS/Windows/macOS) should load this URL for
-  the real-device Beta matrix; outcomes recorded in `docs/real-device-matrix.md`.
+Sources verified on 2026-11-04:
+- Cloudflare "Use Direct Upload with continuous integration" — the recommended workflow is
+  `cloudflare/wrangler-action@v4` with `apiToken`, `accountId`, a
+  `pages deploy <dir> --project-name=<p>` command, and job permissions
+  `contents: read` + `deployments: write`.
+- `cloudflare/wrangler-action` README and `action.yml` at the pinned commit — inputs
+  `apiToken`/`accountId`/`command`/`gitHubToken`, outputs `deployment-url`,
+  `pages-deployment-alias-url`, `command-output`; default Wrangler major `4`; package
+  manager inferred from `package-lock.json` first, so this repo resolves to `npm`.
+- Cloudflare "Direct Upload" — the Pages project must exist before the first deploy
+  (`wrangler pages project create`), and its production branch is fixed at creation;
+  a deploy to any other branch is a preview deployment.
+- Cloudflare "Preview deployments" — production is `<project>.pages.dev`, previews are
+  `<hash>.<project>.pages.dev`; both at the root path, which is why the base is `/`.
+- Cloudflare API token permissions — `Cloudflare Pages: Edit` is the account-scoped
+  permission that creates/edits/deletes Pages projects; that single permission is the
+  minimum for this workflow and the token needs nothing else.
+- `actions/upload-pages-artifact` and `actions/deploy-pages` READMEs — GitHub Pages only.
+- GitHub Actions context reference — `secrets` is available in step-level `if` but not in
+  job-level `if`, which is why the credential check is a step, not a job condition.
 
-### 7. Remaining security / operational blockers
+### 3. Gates kept, and what each run does
 
-- None engineering-blocker for staging readiness; remaining Owner actions: Cloudflare
-  account/token provisioning, staging environment approval, hardware for real-device
-  runs, final merge/deploy decisions.
+| Trigger | Effect |
+|---|---|
+| push / pull request | none — the workflow is `workflow_dispatch` only |
+| manual run, `confirm` != `STAGING` | `guard` fails immediately |
+| manual run, `publish: false` (default) | build + typecheck + coverage + bundle budget + base-path assertion, downloadable artifact, **no credential read, nothing deployed** |
+| manual run, `publish: true` without `publish_phrase` = `DEPLOY-STAGING` | deploy job fails on its first step |
+| manual run, `publish: true` and the phrase typed, credentials missing | deploy job fails on the credential check |
+| manual run, `publish: true`, phrase typed, credentials present | uploads the *same validated artifact* the build job checked, to Cloudflare Pages |
+
+A second typed phrase is required because a read-only check of this repository on
+2026-11-04 found **no `staging` environment and no Actions secrets configured**, so
+environment approval was not yet enforcing anything by itself; the workflow carries its
+own publish gate until the Owner creates it.
+
+Permissions are now `contents: read` workflow-wide plus `deployments: write` on the deploy
+job only. `pages: write` and `id-token: write` are removed. Secret values are passed only
+through `with:` and are never echoed or interpolated into a shell command; the deployed
+bundle is static build output, so no credential can ship inside it.
+
+Rollback: re-run at the previous verified commit, or delete the deployment in the Cloudflare
+Pages dashboard. Learner data is unaffected — it stays in each browser.
+
+### 4. Verified vs not verified (stated honestly)
+
+Verified in this session: workflow YAML parses and passes the GitHub Actions JSON Schema
+(negative control confirms the validator rejects malformed workflows); every action input
+and output used exists in `action.yml` at the pinned commit; root build, bundle budget and
+base-path assertion pass locally; typecheck and the unit/coverage suite pass locally; the
+old configuration provably fails the bundle check.
+
+Not verified, and not claimed: any hosted execution of this workflow. A `workflow_dispatch`
+run with `publish: false` is the next step and needs no credentials; a publishing run is
+impossible until the Owner creates the Cloudflare Pages project and stores the secrets.
+**`STAGING_DEPLOYED` is not the status of this repository.**
+
+### 5. Remaining Owner actions (deployment gate)
+
+1. Create the Cloudflare Pages project once:
+   `npx wrangler pages project create dailylingo-staging --production-branch staging`.
+2. Create an API token holding only `Cloudflare Pages: Edit`, scoped to that account.
+3. In GitHub: create the `staging` environment, add the Owner as a required reviewer, and
+   store `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as *environment* secrets.
+4. Optionally run the workflow with `publish: false` to see the hosted build-only path
+   (deploys nothing, uses no credentials).
+5. Authorize a `publish: true` run only when steps 1–3 are done, then smoke-test the
+   reported `pages.dev` URL on real devices for the matrix in §2 above.
+
+If the Owner prefers a different project name or branch, those are the two `env:` values at
+the top of `.github/workflows/staging.yml`.
 
 ## Reproduce locally
 

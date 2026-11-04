@@ -86,7 +86,8 @@ Then:
 - [ ] Timezone matrix: 54/54 in each of three zones.
 - [ ] Playwright: 16/16 on Chromium, against both the dev server and `dist/`.
 - [ ] Exact commit SHA recorded in [`BETA_ACCEPTANCE.md`](BETA_ACCEPTANCE.md).
-- [ ] Staging built with `VITE_BASE_PATH=/DailyLingo/` and manually smoke-tested.
+- [ ] Staging built with `VITE_BASE_PATH=/` (Cloudflare Pages serves at the root) and
+  manually smoke-tested at the reported `pages.dev` URL.
 - [ ] No public deploy without Owner authorization.
 
 ## 6. Known operational limits

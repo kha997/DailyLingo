@@ -67,9 +67,9 @@ deletion.
 
 Because the repository is public:
 
-- A GitHub Pages staging site is **publicly reachable** even when deployment is
-  owner-approved. Do not publish learner data, private feedback, or internal
-  notes. The app itself stores nothing server-side.
+- A Cloudflare Pages staging site is **publicly reachable** at its `pages.dev` URL even
+  when the deployment itself is owner-approved. Do not publish learner data, private
+  feedback, or internal notes. The app itself stores nothing server-side.
 - CI logs and artifacts are public. Coverage and Playwright artifacts must not
   contain secrets or learner backups. The current artifacts are build output,
   coverage HTML/JSON, and failure traces only.

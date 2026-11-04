@@ -73,11 +73,15 @@ builds `dist/` first and runs the identical suite against the production bundle
 ### Build-time base path
 
 `VITE_BASE_PATH` sets the asset base so one commit can serve from `/` or a
-project sub-path:
+project sub-path. Cloudflare Pages serves at the root, so staging leaves it at `/`:
 
 ```bash
-VITE_BASE_PATH=/DailyLingo/ npm run build
+VITE_BASE_PATH=/ npm run build              # root hosting (Cloudflare Pages, most hosts)
+VITE_BASE_PATH=/DailyLingo/ npm run build   # only if the host serves that sub-path
 ```
+
+`npm run check:bundle` resolves assets against `dist/`, so run it only on a root-based
+build.
 
 ## Project layout
 
