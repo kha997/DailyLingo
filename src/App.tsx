@@ -14,6 +14,7 @@ import { SettingsModal } from './components/SettingsModal.tsx';
 import { StreakDetailsModal } from './components/StreakDetailsModal.tsx';
 import { CustomPracticeModal } from './components/CustomPracticeModal.tsx';
 import { FeedbackModal } from './components/FeedbackModal.tsx';
+import { AccountBanner } from './components/AccountBanner.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
 import {
@@ -53,6 +54,15 @@ import {
 } from './utils/progress.ts';
 import { applyTheme, AppTheme, getSystemTheme } from './utils/theme.ts';
 import { checkAndTriggerDailyReminder } from './utils/notifications.ts';
+import {
+  AuthSession,
+  clearAuthSession,
+  dismissAccountBanner,
+  isAccountBannerDismissed,
+  loadAuthSession,
+  refreshAuthSession,
+  saveAuthSession,
+} from './utils/auth.ts';
 
 // `recharts` is only needed on the analytics tab. Keeping it in a lazy chunk
 // removes roughly two thirds of the initial JavaScript payload.
@@ -67,6 +77,13 @@ const ProgressAnalytics = lazy(() =>
 const VocabularyLibrary = lazy(() =>
   import('./components/VocabularyLibrary.tsx').then((module) => ({
     default: module.VocabularyLibrary,
+  }))
+);
+
+// The account sheet is secondary, so it stays out of the initial bundle.
+const AccountModal = lazy(() =>
+  import('./components/AccountModal.tsx').then((module) => ({
+    default: module.AccountModal,
   }))
 );
 
@@ -111,6 +128,48 @@ export default function App() {
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [showCustomPracticeModal, setShowCustomPracticeModal] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [session, setSession] = useState<AuthSession | null>(loadAuthSession);
+  const [accountBannerDismissed, setAccountBannerDismissed] = useState(isAccountBannerDismissed);
+
+  // Restore the account session, refreshing it when the access token is close
+  // to expiry. A failed refresh signs this browser out without touching data.
+  useEffect(() => {
+    const stored = loadAuthSession();
+    if (!stored) return;
+
+    if (stored.expiresAt > Date.now() + 60_000) {
+      setSession(stored);
+      return;
+    }
+
+    let cancelled = false;
+    void refreshAuthSession(stored).then((next) => {
+      if (cancelled) return;
+      if (next) {
+        saveAuthSession(next);
+        setSession(next);
+      } else {
+        clearAuthSession();
+        setSession(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleAuthenticated = (nextSession: AuthSession) => {
+    saveAuthSession(nextSession);
+    setSession(nextSession);
+    setShowAccountModal(false);
+  };
+
+  const handleSignedOut = () => {
+    clearAuthSession();
+    setSession(null);
+  };
 
   // Surface corrupt/blocked storage once, without uploading anything.
   useEffect(() => {
@@ -406,9 +465,23 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenStreakModal={() => setShowStreakModal(true)}
         onOpenFeedback={() => setShowFeedbackModal(true)}
+        session={session}
+        onOpenAccount={() => setShowAccountModal(true)}
         onToggleTheme={handleToggleTheme}
         currentTheme={userStats.theme || 'light'}
       />
+
+      {!session && !accountBannerDismissed && (
+        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <AccountBanner
+            onOpenAccount={() => setShowAccountModal(true)}
+            onDismiss={() => {
+              dismissAccountBanner();
+              setAccountBannerDismissed(true);
+            }}
+          />
+        </div>
+      )}
 
       {(storageNotice || storageWriteFailed) && (
         <div
@@ -558,6 +631,17 @@ export default function App() {
 
       {showFeedbackModal && (
         <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
+      )}
+
+      {showAccountModal && (
+        <Suspense fallback={null}>
+          <AccountModal
+            session={session}
+            onAuthenticated={handleAuthenticated}
+            onSignedOut={handleSignedOut}
+            onClose={() => setShowAccountModal(false)}
+          />
+        </Suspense>
       )}
 
       <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/80 py-6 mt-12 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors">

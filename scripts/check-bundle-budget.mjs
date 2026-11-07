@@ -11,7 +11,9 @@ import { gzipSync } from 'node:zlib';
  */
 const BUDGET = {
   initialJsGzipBytes: 140_000,
-  initialJsRawBytes: 470_000,
+  // +10 kB for the optional account banner and session restore. The account
+  // sheet itself is lazy, so the transfer budget did not change.
+  initialJsRawBytes: 480_000,
   cssGzipBytes: 16_000,
   distTotalBytes: 2_000_000,
 };
