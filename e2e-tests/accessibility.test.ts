@@ -295,3 +295,41 @@ test('every main screen meets WCAG AA text contrast in light and dark themes', a
 
   expect(findings, `${findings.length} contrast failures:\n${summary}`).toEqual([]);
 });
+
+test('story library, reader and contextual learning meet text contrast in both themes', async ({page}) => {
+  test.setTimeout(60000);
+  await page.addInitScript(() => {
+    class Utterance { text: string; constructor(text: string) { this.text = text; } }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {configurable:true,value:Utterance});
+    Object.defineProperty(window, 'speechSynthesis', {configurable:true,value:{getVoices:()=>[],addEventListener:()=>{},cancel:()=>{},speak:()=>{}}});
+  });
+  await page.goto('/');
+  const findings: Finding[]=[];
+  for(const theme of ['light','dark']) {
+    await page.getByRole('button',{name:'Đọc truyện',exact:true}).click();
+    findings.push(...await scan(page,'story-library',theme,'.story-lab'));
+    await page.locator('[data-open-story]').first().click();
+    await page.getByRole('button',{name:'Nghe toàn truyện',exact:true}).click();
+    await expect(page.locator('[data-speaking="true"]')).toHaveCount(1);
+    findings.push(...await scan(page,'story-reader-spoken',theme,'.story-lab'));
+    await page.getByRole('button',{name:'Hiện bản dịch',exact:true}).click();
+    await page.getByText('Ngữ pháp',{exact:true}).click();
+    const mode=page.getByRole('button',{name:'Tra từ',exact:true});
+    if(await mode.getAttribute('aria-pressed')!=='true')await mode.click();
+    await page.locator('[data-word-id]:not([data-word-id^="occ:"])').first().click();
+    const panel=page.getByRole('dialog',{name:'Tra từ trong ngữ cảnh'});
+    await expect(panel).toBeVisible();
+    findings.push(...await scan(page,'story-lookup',theme,'.story-lab'));
+    const save=panel.getByRole('button',{name:'Lưu vào sổ từ',exact:true});
+    if(await save.count())await save.click();
+    await expect(page.locator('[data-learning-state="saved"]').first()).toBeVisible();
+    await page.getByRole('button',{name:'Nghe toàn truyện',exact:true}).click();
+    findings.push(...await scan(page,'story-saved-and-spoken',theme,'.story-lab'));
+    await page.getByRole('button',{name:'Tất cả truyện',exact:true}).click();
+    if(theme==='light') {
+      await page.getByRole('button',{name:'Đổi giao diện sáng/tối',exact:true}).click();
+      await expect(page.locator('html')).toHaveClass(/dark/);
+    }
+  }
+  expect(findings,JSON.stringify(findings,null,2)).toEqual([]);
+});

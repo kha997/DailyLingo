@@ -25,6 +25,11 @@ out-of-scope boundaries.
   manually.
 - Progress that is computed from recorded activity: XP, level, streak, per-skill
   estimates, daily XP history, and badges.
+- Story Reading Lab: three original A1/A2/B1 passages, sentence listening,
+  curated Vietnamese translations/grammar, contextual word pronunciation,
+  persistent learning marks, notebook integration and local sentence-level resume.
+  See [content QA](docs/STORY_CONTENT_QA.md), [independent review](docs/STORY_READER_INDEPENDENT_REVIEW.md),
+  and [verification / real-device checklist](docs/STORY_READER_VERIFICATION.md).
 - Local-only diagnostics and an opt-in feedback draft, both copy/download only.
 
 ### Honest limits

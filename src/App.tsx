@@ -8,7 +8,6 @@ import { TopNav } from './components/TopNav.tsx';
 import { DailyHeroSection } from './components/DailyHeroSection.tsx';
 import { LessonCatalog } from './components/LessonCatalog.tsx';
 import { QuickPractice } from './components/QuickPractice.tsx';
-import { VocabularyNotebook } from './components/VocabularyNotebook.tsx';
 import { ExerciseRunner } from './components/ExerciseRunner.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { StreakDetailsModal } from './components/StreakDetailsModal.tsx';
@@ -86,6 +85,10 @@ const AccountModal = lazy(() =>
     default: module.AccountModal,
   }))
 );
+
+const VocabularyNotebook = lazy(() => import('./components/VocabularyNotebook.tsx').then(module => ({ default: module.VocabularyNotebook })));
+
+const StoryReadingLab = lazy(() => import('./components/StoryReadingLab.tsx').then(module => ({ default: module.StoryReadingLab })));
 
 const LibrarySkeleton = () => (
   <div
@@ -436,6 +439,7 @@ export default function App() {
       );
       return false;
     }
+    setActiveTab('lessons');
     setUserStats({ ...INITIAL_USER_STATS, skillMastery: { ...INITIAL_USER_STATS.skillMastery } });
     setSavedWords([]);
     setBadges(cloneBadges());
@@ -447,6 +451,7 @@ export default function App() {
   };
 
   const handleImportData = (data: { stats: UserStats; words: SavedWord[]; badges: Badge[] }) => {
+    setActiveTab('lessons');
     setUserStats(data.stats);
     setSavedWords(data.words);
     setBadges(data.badges.length > 0 ? data.badges : cloneBadges());
@@ -551,7 +556,16 @@ export default function App() {
           </ErrorBoundary>
         )}
 
+        {activeTab === 'stories' && (
+          <ErrorBoundary fallbackTitle="Không mở được truyện" fallbackMessage="Dữ liệu học tập đã lưu vẫn được giữ nguyên.">
+            <Suspense fallback={<div role="status">Đang mở truyện…</div>}>
+              <StoryReadingLab suspended={showSettings || showAccountModal || showFeedbackModal || showStreakModal || !!activeSession} savedWords={savedWords} onSaveWord={(word) => setSavedWords(prev => prev.some(w => w.id === word.id || (w.word === word.word && w.partOfSpeech === word.partOfSpeech && w.meaningVi === word.meaningVi)) ? prev : [word, ...prev])} onToggleMastered={handleToggleMastered} audioAccent={userStats.audioAccent} />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
         {activeTab === 'notebook' && (
+          <Suspense fallback={<div role="status">Đang mở sổ từ…</div>}>
           <VocabularyNotebook
             savedWords={savedWords}
             onToggleMastered={handleToggleMastered}
@@ -561,6 +575,7 @@ export default function App() {
             audioAccent={userStats.audioAccent}
             audioRate={userStats.audioRate}
           />
+          </Suspense>
         )}
 
         {activeTab === 'analytics' && (

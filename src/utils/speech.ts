@@ -11,6 +11,34 @@ export const soundFX = {
 // Web Speech Synthesis (Text to Speech)
 let availableVoices: SpeechSynthesisVoice[] = [];
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+let speechGeneration = 0;
+let finishActive: (() => void) | null = null;
+const speechCancellationListeners = new Set<() => void>();
+/** Coordinate ownership across the notebook, settings preview and reader. */
+export function onEnglishSpeechCancelled(listener: () => void): () => void {
+  speechCancellationListeners.add(listener);
+  return () => { speechCancellationListeners.delete(listener); };
+}
+
+/** Also cancels delayed legacy speak requests when entering the story reader. */
+export function cancelEnglishSpeech(): void {
+  speechGeneration += 1;
+  speechCancellationListeners.forEach(listener => listener());
+  finishActive?.();
+  finishActive = null;
+  activeUtterance = null;
+  try { window.speechSynthesis?.cancel(); } catch { /* Platform may throw. */ }
+}
+
+export function selectEnglishVoice(accent: 'en-US' | 'en-GB'): SpeechSynthesisVoice | undefined {
+  // Refresh on each explicit request; browsers may populate voices asynchronously.
+  try { availableVoices = window.speechSynthesis?.getVoices() ?? []; } catch { availableVoices = []; }
+  return availableVoices.find(v =>
+    v.lang.toLowerCase().replace('_', '-').startsWith(accent.toLowerCase()) &&
+    /Natural|Google|Samantha|Daniel|Premium/.test(v.name)
+  ) ?? availableVoices.find(v => v.lang.toLowerCase().replace('_', '-').startsWith(accent.toLowerCase()))
+    ?? availableVoices.find(v => v.lang.toLowerCase().startsWith('en'));
+}
 
 if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   const loadVoices = () => {
@@ -25,19 +53,18 @@ export function speakEnglish(
   options: { rate?: number; accent?: 'en-US' | 'en-GB' } = {}
 ): Promise<void> {
   return new Promise((resolve) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
       resolve();
       return;
     }
 
-    try {
-      window.speechSynthesis.cancel();
-    } catch {
-      // Ignore
-    }
+    cancelEnglishSpeech();
+    const generation = speechGeneration;
+    finishActive = resolve;
 
     // Small delay prevents Chromium cancel/speak collision race condition
     setTimeout(() => {
+      if (generation !== speechGeneration) { resolve(); return; }
       try {
         const utterance = new SpeechSynthesisUtterance(text);
         activeUtterance = utterance; // Prevent garbage collection mid-speech
@@ -51,19 +78,7 @@ export function speakEnglish(
         utterance.rate = targetRate;
         utterance.pitch = 1.0;
 
-        // Pick a natural English voice if possible
-        if (availableVoices.length === 0) {
-          availableVoices = window.speechSynthesis.getVoices();
-        }
-        const preferredVoice = availableVoices.find(
-          (v) =>
-            v.lang.toLowerCase().replace('_', '-').startsWith(accent.toLowerCase().slice(0, 2)) &&
-            (v.name.includes('Natural') ||
-              v.name.includes('Google') ||
-              v.name.includes('Samantha') ||
-              v.name.includes('Daniel') ||
-              v.name.includes('Premium'))
-        ) || availableVoices.find((v) => v.lang.toLowerCase().startsWith('en'));
+        const preferredVoice = selectEnglishVoice(accent);
 
         if (preferredVoice) {
           utterance.voice = preferredVoice;
@@ -73,11 +88,15 @@ export function speakEnglish(
         const finish = () => {
           if (!isFinished) {
             isFinished = true;
-            activeUtterance = null;
+            if (generation === speechGeneration) {
+              activeUtterance = null;
+              finishActive = null;
+            }
             resolve();
           }
         };
 
+        finishActive = finish;
         utterance.onend = finish;
         utterance.onerror = finish;
 
