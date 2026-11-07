@@ -43,7 +43,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 xl:gap-0">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 xl:gap-0">
         {/* Zone 1: Single text wordmark */}
         <button
           onClick={() => onSelectTab('lessons')}
@@ -56,7 +56,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
 
         {/* Zone 2: Navigation Links (Single-line, clean text with underline active state) */}
-        <nav className="hidden xl:flex items-center ml-4 xl:ml-6 gap-3 xl:gap-5 2xl:gap-7 text-sm font-medium text-slate-600 dark:text-slate-400">
+        <nav className="hidden 2xl:flex items-center ml-4 xl:ml-6 gap-3 xl:gap-5 2xl:gap-7 text-sm font-medium text-slate-600 dark:text-slate-400">
           <button
             onClick={() => onSelectTab('lessons')}
             className={`flex items-center gap-1.5 py-1 transition-colors whitespace-nowrap ${
@@ -104,6 +104,8 @@ export const TopNav: React.FC<TopNavProps> = ({
             <BookMarked className="w-4 h-4" />
             <span>Sổ Tay Từ Vựng</span>
           </button>
+
+          <button onClick={() => onSelectTab('stories')} aria-current={activeTab === 'stories' ? 'page' : undefined} className={`flex items-center gap-1.5 py-1 whitespace-nowrap ${activeTab === 'stories' ? 'text-indigo-600 dark:text-indigo-400 font-semibold border-b-2 border-indigo-600' : 'hover:text-slate-900 dark:hover:text-white'}`}><BookOpen className="w-4 h-4" /><span>Đọc truyện</span></button>
 
           <button
             onClick={() => onSelectTab('analytics')}
@@ -180,7 +182,7 @@ export const TopNav: React.FC<TopNavProps> = ({
       </div>
 
       {/* Mobile Sub-Navigation Bar */}
-      <div className="xl:hidden flex items-center justify-around border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 px-1 text-[10px] sm:text-xs transition-colors">
+      <div className="2xl:hidden flex items-center justify-around border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-2 px-1 text-[10px] sm:text-xs transition-colors">
         <button
           onClick={() => onSelectTab('lessons')}
           className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1 px-1 sm:px-2 whitespace-nowrap ${
@@ -194,6 +196,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
 
         <button
+          aria-label="Luyện Tập Nhanh"
           onClick={() => onSelectTab('practice')}
           className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1 px-1 sm:px-2 whitespace-nowrap ${
             activeTab === 'practice'
@@ -218,6 +221,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
 
         <button
+          aria-label="Sổ Tay Từ Vựng"
           onClick={() => onSelectTab('notebook')}
           className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1 px-1 sm:px-2 whitespace-nowrap ${
             activeTab === 'notebook'
@@ -229,7 +233,10 @@ export const TopNav: React.FC<TopNavProps> = ({
           <span>Sổ Từ Vựng</span>
         </button>
 
+        <button onClick={() => onSelectTab('stories')} aria-current={activeTab === 'stories' ? 'page' : undefined} className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1 px-1 whitespace-nowrap ${activeTab === 'stories' ? 'text-indigo-600 dark:text-indigo-400 font-semibold' : 'text-slate-600 dark:text-slate-400'}`}><BookOpen className="w-4 h-4" /><span>Đọc truyện</span></button>
+
         <button
+          aria-label="Tiến Độ & Thống Kê"
           onClick={() => onSelectTab('analytics')}
           className={`flex-1 min-w-0 flex flex-col items-center gap-1 py-1 px-1 sm:px-2 whitespace-nowrap ${
             activeTab === 'analytics'

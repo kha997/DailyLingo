@@ -1,4 +1,5 @@
 import { Badge, CEFRLevel, SavedWord, TopicCategory, UserStats } from '../types/index.ts';
+import { emptyStoryLearning, isValidStoryLearning, sanitizeStoryLearning, type StoryLearning } from '../stories/progress.ts';
 import { DEFAULT_BADGES, INITIAL_SAVED_WORDS } from '../data/curriculumData.ts';
 
 export const STORAGE_KEYS = {
@@ -6,6 +7,7 @@ export const STORAGE_KEYS = {
   words: 'dailylingo_saved_words',
   badges: 'dailylingo_badges',
   soundMuted: 'dailylingo_sound_muted',
+  stories: 'dailylingo_story_learning',
 } as const;
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -96,6 +98,23 @@ function parseStoredValue(key: string, raw: string): unknown {
     backupCorrupt(key, raw);
     return undefined;
   }
+}
+
+/** Story data shares the same corruption recovery and failure reporting as other learning data. */
+export function loadStoryLearning(): StoryLearning {
+  const { raw, blocked } = safeReadRaw(STORAGE_KEYS.stories);
+  if (blocked || !raw) return emptyStoryLearning();
+  const parsed = parseStoredValue(STORAGE_KEYS.stories, raw);
+  if (!isRecord(parsed) || parsed.schemaVersion !== 1 || !isRecord(parsed.stories)) {
+    if (parsed !== undefined) backupCorrupt(STORAGE_KEYS.stories, raw);
+    return emptyStoryLearning();
+  }
+  if (!isValidStoryLearning(parsed)) backupCorrupt(STORAGE_KEYS.stories, raw);
+  return sanitizeStoryLearning(parsed);
+}
+
+export function saveStoryLearning(data: StoryLearning): boolean {
+  return setRaw(STORAGE_KEYS.stories, JSON.stringify(sanitizeStoryLearning(data)));
 }
 
 export function getTodayDateString(): string {
@@ -466,6 +485,8 @@ export interface UserDataBackup {
   preferences: {
     soundMuted: boolean;
   };
+  /** Absent in older version-1 backups; importing those preserves story learning. */
+  stories?: StoryLearning;
 }
 
 export function createUserDataBackup(): UserDataBackup {
@@ -476,6 +497,7 @@ export function createUserDataBackup(): UserDataBackup {
     stats: loadUserStats(),
     words: loadSavedWords(),
     badges: loadBadges(),
+    stories: loadStoryLearning(),
     preferences: {
       soundMuted: localStorage.getItem(STORAGE_KEYS.soundMuted) === 'true',
     },
@@ -528,6 +550,11 @@ export function importUserDataBackup(raw: string): ImportResult {
     return { ok: false, message: 'Danh sách huy hiệu trong tệp không hợp lệ.' };
   }
 
+  if ('stories' in parsed && !isValidStoryLearning(parsed.stories)) {
+    recordRecovery({ kind: 'invalid-backup', key: 'import' });
+    return { ok: false, message: 'Dữ liệu đọc truyện trong tệp không hợp lệ.' };
+  }
+  const stories = 'stories' in parsed ? sanitizeStoryLearning(parsed.stories) : undefined;
   const stats = sanitizeUserStats(parsed.stats);
   const soundMuted =
     isRecord(parsed.preferences) && parsed.preferences.soundMuted === true;
@@ -540,6 +567,7 @@ export function importUserDataBackup(raw: string): ImportResult {
     STORAGE_KEYS.words,
     STORAGE_KEYS.badges,
     STORAGE_KEYS.soundMuted,
+    ...(stories ? [STORAGE_KEYS.stories] : []),
   ];
   const beforeImport = new Map<string, string | null>();
   targetKeys.forEach((key) => {
@@ -572,7 +600,8 @@ export function importUserDataBackup(raw: string): ImportResult {
     saveUserStats(stats) &&
     saveSavedWords(words) &&
     saveBadges(badges) &&
-    setRaw(STORAGE_KEYS.soundMuted, String(soundMuted));
+    setRaw(STORAGE_KEYS.soundMuted, String(soundMuted)) &&
+    (!stories || saveStoryLearning(stories));
 
   if (!writeSucceeded) {
     // Import is all-or-nothing: put the previous bytes back rather than leaving
