@@ -9,10 +9,12 @@ import {
   LibraryBig,
   Sun,
   Moon,
-  MessageSquare
+  MessageSquare,
+  UserRound
 } from 'lucide-react';
 import { AppTab, UserStats } from '../types/index.ts';
 import { AppTheme } from '../utils/theme.ts';
+import { AuthSession } from '../utils/auth.ts';
 
 interface TopNavProps {
   activeTab: AppTab;
@@ -21,6 +23,8 @@ interface TopNavProps {
   onOpenSettings: () => void;
   onOpenStreakModal: () => void;
   onOpenFeedback: () => void;
+  session?: AuthSession | null;
+  onOpenAccount?: () => void;
   onToggleTheme?: () => void;
   currentTheme?: AppTheme;
 }
@@ -32,12 +36,14 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenSettings,
   onOpenStreakModal,
   onOpenFeedback,
+  session = null,
+  onOpenAccount,
   onToggleTheme,
   currentTheme = 'light',
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 xl:gap-0">
         {/* Zone 1: Single text wordmark */}
         <button
           onClick={() => onSelectTab('lessons')}
@@ -50,7 +56,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         </button>
 
         {/* Zone 2: Navigation Links (Single-line, clean text with underline active state) */}
-        <nav className="hidden xl:flex items-center gap-4 xl:gap-7 text-sm font-medium text-slate-600 dark:text-slate-400">
+        <nav className="hidden xl:flex items-center ml-4 xl:ml-6 gap-3 xl:gap-5 2xl:gap-7 text-sm font-medium text-slate-600 dark:text-slate-400">
           <button
             onClick={() => onSelectTab('lessons')}
             className={`flex items-center gap-1.5 py-1 transition-colors whitespace-nowrap ${
@@ -118,7 +124,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           {onToggleTheme && (
             <button
               onClick={onToggleTheme}
-              className="p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="hidden sm:flex p-1.5 sm:p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title={currentTheme === 'dark' ? 'Chuyển sang Giao diện Sáng' : 'Chuyển sang Giao diện Tối'}
               aria-label="Đổi giao diện sáng/tối"
             >
@@ -132,7 +138,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 
           <button
             onClick={onOpenStreakModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 transition-colors border border-amber-200 dark:border-amber-800/60 text-xs font-semibold whitespace-nowrap"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 transition-colors border border-amber-200 dark:border-amber-800/60 text-xs font-semibold whitespace-nowrap"
             title="Xem chi tiết chuỗi ngày học"
           >
             <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
@@ -149,6 +155,18 @@ export const TopNav: React.FC<TopNavProps> = ({
             <MessageSquare className="w-4 h-4" />
             <span className="hidden sm:inline">Góp ý</span>
           </button>
+
+          {onOpenAccount && (
+            <button
+              onClick={onOpenAccount}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-950/70 transition-colors text-xs font-semibold whitespace-nowrap"
+              title={session ? `Tài khoản ${session.user.email}` : 'Tạo tài khoản DailyLingo'}
+              aria-label={session ? 'Tài khoản DailyLingo' : 'Tạo tài khoản DailyLingo'}
+            >
+              <UserRound className="w-4 h-4" />
+              <span className="hidden sm:inline">{session ? 'Tài khoản' : 'Đăng ký'}</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenSettings}

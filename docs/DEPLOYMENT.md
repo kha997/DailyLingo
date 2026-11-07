@@ -52,10 +52,14 @@ no runtime secret.
    `staging`, root directory `/`, build command `npm run build`, deploy command
    `npx wrangler deploy`. Set `NODE_VERSION=22` if the build image does not already default
    to Node 22.
-4. Keep the build command on npm. The repository now ships only `package-lock.json`;
+4. If accounts are enabled, add build variables `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY` under Workers Builds → Settings → Build. Both are public
+   values; the anon key is safe in the client bundle. A build without them ships in
+   guest mode and the account sheet says sign-up is not enabled.
+5. Keep the build command on npm. The repository now ships only `package-lock.json`;
    `bun.lock` was removed because the frozen bun install on `main` failed before `vite`
    was installed. Do not switch the build command back to `bun run build`.
-5. Confirm no paid plan or service is required. Do not add a custom domain unless a
+6. Confirm no paid plan or service is required. Do not add a custom domain unless a
    separate Access application is configured for it.
 
 Steps 1–5 are Cloudflare settings. They are intentionally **not** performed by the agent:
@@ -76,10 +80,27 @@ they require account access the agent does not hold.
 
 Workers Builds performs the install from `package-lock.json`, then the build command
 (`npm run build`, which is `vite build` with the root base path), then
-`npx wrangler deploy`. `wrangler.jsonc` uploads exactly the eight files in `dist/`.
+`npx wrangler deploy`. `wrangler.jsonc` uploads the files in `dist/`.
 Hosted GitHub CI independently runs `npm ci`, the Access self-test, typecheck, coverage,
 the timezone matrix, the build, the bundle budget, the static-assets dry-run, and the
 Playwright journeys.
+
+### Optional accounts (Supabase)
+
+Accounts are optional and do **not** replace Cloudflare Access. The Worker still blocks
+unauthenticated visitors; creating an account in the app does not grant access, so
+testers must remain in the Access allow policy.
+
+- Create a free Supabase project, then set `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_ANON_KEY` as build variables for the Worker.
+- Never add the `service_role` key. It bypasses row-level security and must not reach
+  a client bundle.
+- The session is kept in `localStorage`. Learning progress stays on the device;
+  multi-device sync is not part of this release.
+- Supabase's built-in mailer is rate-limited on the free plan. Either disable
+  "Confirm email" for a small Beta or configure custom SMTP before inviting testers.
+- Without the two variables the account sheet shows a configuration notice and the
+  rest of the app works as before.
 
 The inactive Pages workflow (`.github/workflows/staging.yml`) is not part of this path. It
 is manual-only and fails closed if run without Pages setup, so it cannot publish by
